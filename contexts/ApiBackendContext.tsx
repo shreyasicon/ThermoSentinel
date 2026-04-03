@@ -16,7 +16,8 @@ import {
   type ApiBackendMode,
 } from '@/lib/public-api-base';
 
-const STORAGE_KEY = 'thermosentinel-api-backend';
+/** Bumped so hosted users get default Local without an old "lambda" preference. */
+const STORAGE_KEY = 'thermosentinel-api-backend-v2';
 
 export type ApiBackendContextValue = {
   mode: ApiBackendMode;

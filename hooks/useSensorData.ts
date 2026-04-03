@@ -73,7 +73,7 @@ function latestValuesFromReadings(
 }
 
 export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
-  const { publicApiUrl } = useApiBackend();
+  const { publicApiUrl, mode } = useApiBackend();
   const [racks, setRacks] = useState<RackData[]>([]);
   const [backendTemps, setBackendTemps] = useState<number[]>([]);
   const [backendHumidity, setBackendHumidity] = useState<number[]>([]);
@@ -93,23 +93,31 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
       if (cancelled) return;
       let temps: number[] = [];
       let humidity: number[] = [];
+      let gotReal = false;
       if (tempRes.ok) {
         const { readings } = await tempRes.json();
-        temps = latestValuesFromReadings(readings ?? [], TOTAL_SENSORS);
+        const t = latestValuesFromReadings(readings ?? [], TOTAL_SENSORS);
+        if (t.length > 0) {
+          temps = t;
+          gotReal = true;
+        }
       }
       if (humRes.ok) {
         const { readings } = await humRes.json();
-        humidity = latestValuesFromReadings(readings ?? [], TOTAL_SENSORS);
+        const h = latestValuesFromReadings(readings ?? [], TOTAL_SENSORS);
+        if (h.length > 0) {
+          humidity = h;
+          gotReal = true;
+        }
       }
-      if (temps.length === 0) {
-        temps = latestDemoValues('temperature', TOTAL_SENSORS);
-      }
-      if (humidity.length === 0) {
-        humidity = latestDemoValues('humidity', TOTAL_SENSORS);
+      // Demo values only in Lambda mode — Local must stay empty/zeros when the PC API is down.
+      if (mode === 'lambda') {
+        if (temps.length === 0) temps = latestDemoValues('temperature', TOTAL_SENSORS);
+        if (humidity.length === 0) humidity = latestDemoValues('humidity', TOTAL_SENSORS);
       }
       setBackendTemps(temps);
       setBackendHumidity(humidity);
-      setHasData(true);
+      setHasData(gotReal || mode === 'lambda');
     };
     run();
     const interval = setInterval(run, 2000);
@@ -117,7 +125,7 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [publicApiUrl]);
+  }, [publicApiUrl, mode]);
 
   useEffect(() => {
     const hasBackend = backendTemps.length > 0 || backendHumidity.length > 0;
