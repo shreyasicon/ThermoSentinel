@@ -25,7 +25,7 @@ export default function AnalyticsPage() {
             <div>
               <h1 className="text-3xl font-bold text-white">Analytics</h1>
               <p className="text-sm text-white/60 mt-1 max-w-2xl">
-                One chart style per sensor type. Data follows the fog → cloud API; charts refresh every 30 seconds.
+                One chart style per sensor type. Data follows the fog to cloud API; charts refresh every 30 seconds.
                 Time axis shows one point per minute for readability.
               </p>
             </div>

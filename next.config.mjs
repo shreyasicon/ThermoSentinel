@@ -2,7 +2,8 @@
 const staticExport = process.env.STATIC_EXPORT === 'true';
 
 const nextConfig = {
-  ...(staticExport ? { output: 'export' } : {}),
+  // Trailing slashes improve static hosting (Amplify/S3) so /analytics/ maps to analytics/index.html.
+  ...(staticExport ? { output: 'export', trailingSlash: true } : {}),
   typescript: {
     ignoreBuildErrors: true,
   },

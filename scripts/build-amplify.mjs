@@ -25,15 +25,29 @@ for (const file of listRouteFiles(appApiRoot)) {
   renamed.push({ from: file, to: hidden });
 }
 
+const middlewarePath = path.join(root, 'middleware.ts');
+const middlewareSkip = path.join(root, 'middleware.ts.__amplify_skip');
+let middlewareRenamed = false;
+if (fs.existsSync(middlewarePath)) {
+  fs.renameSync(middlewarePath, middlewareSkip);
+  middlewareRenamed = true;
+}
+
+let exitCode = 0;
 try {
   const result = spawnSync('npx', ['cross-env', 'STATIC_EXPORT=true', 'next', 'build'], {
     cwd: root,
     stdio: 'inherit',
     shell: true,
   });
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  exitCode = result.status ?? 0;
 } finally {
+  if (middlewareRenamed && fs.existsSync(middlewareSkip)) {
+    fs.renameSync(middlewareSkip, middlewarePath);
+  }
   for (const entry of renamed.reverse()) {
     if (fs.existsSync(entry.to)) fs.renameSync(entry.to, entry.from);
   }
 }
+
+process.exit(exitCode === 0 ? 0 : exitCode);
