@@ -3,7 +3,7 @@
 import { useApiBackend } from '@/contexts/ApiBackendContext';
 
 export default function ApiBackendToggle() {
-  const { mode, setMode, apiBase, lambdaMisconfigured } = useApiBackend();
+  const { mode, setMode, apiBase } = useApiBackend();
 
   return (
     <div className="flex flex-col items-end gap-2 text-right max-w-[min(100%,280px)]">
@@ -38,11 +38,6 @@ export default function ApiBackendToggle() {
       >
         {apiBase ? apiBase : 'same origin'}
       </p>
-      {lambdaMisconfigured && (
-        <p className="text-[10px] text-amber-400/90 leading-tight">
-          Set NEXT_PUBLIC_LAMBDA_API_URL for Lambda; using local base until then.
-        </p>
-      )}
       {mode === 'local' && (
         <p className="text-[10px] text-white/40 leading-tight">
           Run <span className="text-white/60 font-mono">npm run dev</span> locally for live numbers; no demo data.
@@ -50,8 +45,8 @@ export default function ApiBackendToggle() {
       )}
       {mode === 'lambda' && (
         <p className="text-[10px] text-white/40 leading-tight">
-          Calls the deployed API Gateway + Lambda URL (set{' '}
-          <span className="text-white/60 font-mono">NEXT_PUBLIC_LAMBDA_API_URL</span> to override).
+          Uses API Gateway + Lambda. Override the base URL with{' '}
+          <span className="text-white/60 font-mono">NEXT_PUBLIC_LAMBDA_API_URL</span> at build time if needed.
         </p>
       )}
     </div>

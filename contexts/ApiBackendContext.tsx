@@ -9,12 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import {
-  buildPublicApiUrl,
-  getLambdaApiBase,
-  resolveApiBaseForMode,
-  type ApiBackendMode,
-} from '@/lib/public-api-base';
+import { buildPublicApiUrl, resolveApiBaseForMode, type ApiBackendMode } from '@/lib/public-api-base';
 
 /** Bumped so hosted users get default Local without an old "lambda" preference. */
 const STORAGE_KEY = 'thermosentinel-api-backend-v2';
@@ -24,8 +19,6 @@ export type ApiBackendContextValue = {
   setMode: (m: ApiBackendMode) => void;
   apiBase: string;
   publicApiUrl: (path: string) => string;
-  /** True when Lambda mode is selected but no Lambda URL was set at build time. */
-  lambdaMisconfigured: boolean;
 };
 
 const ApiBackendContext = createContext<ApiBackendContextValue | null>(null);
@@ -51,9 +44,6 @@ export function ApiBackendProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const lambdaConfigured = Boolean(getLambdaApiBase());
-  const lambdaMisconfigured = mode === 'lambda' && !lambdaConfigured;
-
   const apiBase = useMemo(() => resolveApiBaseForMode(mode), [mode]);
 
   const publicApiUrl = useCallback(
@@ -67,9 +57,8 @@ export function ApiBackendProvider({ children }: { children: ReactNode }) {
       setMode,
       apiBase,
       publicApiUrl,
-      lambdaMisconfigured,
     }),
-    [mode, setMode, apiBase, publicApiUrl, lambdaMisconfigured],
+    [mode, setMode, apiBase, publicApiUrl],
   );
 
   return <ApiBackendContext.Provider value={value}>{children}</ApiBackendContext.Provider>;
