@@ -1,0 +1,236 @@
+%% ThermoSentinel --- IEEE Conference Style Project Report
+%% Compile: pdflatex PROJECT_REPORT_IEEE.tex (twice if references shift)
+%% Requires: IEEEtran.cls (TeX Live / MiKTeX)
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{hyperref}
+\hypersetup{hidelinks}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{ThermoSentinel: Edge--Fog--Cloud Environmental Monitoring for Data Centers}
+
+\author{\IEEEauthorblockN{Author Name(s)}
+\IEEEauthorblockA{\textit{Department / Institution}\\
+City, Country \\
+email@institution.edu}
+
+%% Replace with your names and affiliation; uncomment if multiple authors:
+% \and
+% \IEEEauthorblockN{Second Author}
+% \IEEEauthorblockA{\textit{Department} \\
+% email2@institution.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+This report describes \emph{ThermoSentinel}, a full-stack demonstration system for real-time environmental monitoring in data-center--like settings using an edge--fog--cloud architecture. Sensors (simulated) produce multi-type readings---temperature, humidity, pressure, airflow, and smoke---which are aggregated at a fog layer and ingested into a cloud API. The cloud exposes REST endpoints for health checks, ingest, and time-series queries; a Next.js dashboard visualizes rack-level metrics and trends. The production deployment separates concerns: static hosting on AWS Amplify for the web UI, and AWS API Gateway (HTTP API) with AWS Lambda for the backend, optionally backed by Turso (libSQL) for durable storage across serverless invocations. We summarize objectives, system design, implementation choices, continuous integration and deployment practices, and lessons learned from building and operating the system.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Fog computing, Internet of Things, environmental monitoring, serverless computing, AWS Lambda, Next.js, edge--cloud architecture.
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+\subsection{Domain and motivation}
+Modern data centers and server rooms depend on continuous monitoring of temperature, humidity, differential pressure, airflow, and fire-related signals to avoid thermal runaway, condensation, and safety incidents~\cite{buyya2016fog}. Centralized cloud analytics scales well for historical reporting, but strict latency and resilience requirements often call for processing closer to the physical plant---the \emph{fog} or \emph{edge} layer~\cite{vaquero2014research}.
+
+ThermoSentinel situates itself in this domain: it models a small multi-rack facility where heterogeneous sensors feed a local fog node that validates and forwards envelopes to a cloud ingest API, with a browser-based dashboard for operators.
+
+\subsection{Objectives}
+The project pursued the following objectives:
+\begin{itemize}
+  \item Model a realistic \textbf{edge--fog--cloud} data path from sensors to persistent or queryable cloud state.
+  \item Provide a \textbf{responsive web dashboard} with rack visualization, trends, and backend-driven averages.
+  \item Implement a \textbf{cloud API} for ingest and read paths suitable for serverless deployment.
+  \item Demonstrate \textbf{deployment} to managed AWS services (Amplify + API Gateway + Lambda), with documentation for optional full-stack hosting (Elastic Beanstalk).
+\end{itemize}
+
+\subsection{Requirements}
+Functional requirements included: (R1)~ingest structured fog envelopes at the cloud; (R2)~query recent readings per sensor type; (R3)~health endpoint for monitoring; (R4)~dashboard polling or refresh aligned with backend availability; (R5)~configurable simulator intervals per sensor class. Non-functional requirements included: modularity (separate simulator, fog, and cloud code); TypeScript for maintainability; CORS-enabled HTTP API for static hosting; and optional external database (Turso) for Lambda-appropriate durability~\cite{amazon2024lambda}.
+
+\section{Architecture and Design}
+
+\subsection{Layered logical architecture}
+The system follows three logical tiers:
+\begin{enumerate}
+  \item \textbf{Edge (sensor layer):} A sensor \emph{simulator} generates readings at configurable \emph{sample} and \emph{dispatch} intervals per type. Transport may be MQTT (publish per reading/topic) or HTTP POST to the fog node.
+  \item \textbf{Fog layer:} A Node.js HTTP (and optional MQTT subscriber) \emph{fog node} receives batches, validates payloads, timestamps envelopes, and POSTs to the cloud \texttt{/api/ingest}. This layer embodies local aggregation and protocol bridging~\cite{yi2015survey}.
+  \item \textbf{Cloud layer:} Ingest processing persists readings (in-memory and/or Turso), and REST handlers expose \texttt{/api/sensors/\{type\}/readings} for the dashboard. The UI may be served by Next.js in development (same origin) or as a static export calling \texttt{NEXT\_PUBLIC\_API\_URL}.
+\end{enumerate}
+
+\subsection{Cloud architecture choice and justification}
+We adopted a \textbf{split deployment} for production: \textbf{AWS Amplify Hosting} for the static Next.js export and \textbf{Amazon API Gateway HTTP API + AWS Lambda} for the API. Rationale:
+\begin{itemize}
+  \item \textbf{Cost and operational surface:} Static assets on object storage with CDN integration (Amplify) avoids running 24/7 compute for the UI; Lambda charges per request, fitting variable demo traffic~\cite{amazon2024apigw}.
+  \item \textbf{Separation of concerns:} The browser cannot rely on same-origin \texttt{/api} routes when the UI is purely static; a dedicated base URL decouples frontend release cycles from API deployments.
+  \item \textbf{Scalability pattern:} API Gateway fronts stateless Lambda functions---a common serverless pattern~\cite{baldini2017serverless}. Optional Turso (libSQL) addresses Lambda's ephemeral filesystem and multi-instance concurrency by centralizing durable reads/writes~\cite{libsql2024}.
+\end{itemize}
+
+An alternative retained in the codebase is \textbf{AWS Elastic Beanstalk} with a full Next.js server, which keeps UI and API on one origin but increases always-on cost and complexity; we document it for courses requiring a monolithic deployment.
+
+\subsection{Design patterns}
+Key patterns include: \textbf{API Gateway as single entry} for HTTP routes; \textbf{single Lambda handler} multiplexing paths (\texttt{/api/health}, \texttt{/api/ingest}, \texttt{/api/sensors/\{type\}/readings}) to reduce cold-start proliferation; \textbf{shared library code} between Next.js API routes (local dev) and Lambda (production) for consistent business logic; \textbf{CORS} on the HTTP API for browser access from Amplify domains; and \textbf{environment-based API base URL} (\texttt{publicApiUrl}) for static export compatibility.
+
+\subsection{Sensor timing design}
+Default simulator timings (sample / dispatch) were set to reflect physical dynamics: e.g., temperature sampled every 5~s and dispatched every 15~s for gradual thermal drift; humidity and pressure slower; smoke faster for safety. These defaults are centralized in configuration and overridable via environment variables (e.g., \texttt{TEMPERATURE\_SAMPLE\_MS}). Table~\ref{tab:intervals} summarizes the implemented policy.
+
+\begin{table}[htbp]
+\caption{Default sample and dispatch intervals per sensor type (milliseconds)}
+\begin{center}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Sensor type} & \textbf{Sample} & \textbf{Dispatch} \\
+\hline
+Temperature & 5000 & 15000 \\
+Humidity & 30000 & 60000 \\
+Pressure & 30000 & 60000 \\
+Airflow & 30000 & 45000 \\
+Smoke / fire & 5000 & 10000 \\
+\hline
+\end{tabular}
+\label{tab:intervals}
+\end{center}
+\end{table}
+
+The simulator uses two timers per type: one appends generated readings to a buffer at \emph{sample} cadence; the other flushes the buffer to the fog at \emph{dispatch} cadence. This separation models realistic devices that oversample locally but uplink less often to save bandwidth~\cite{mqtt2014}.
+
+\subsection{Critical analysis}
+\textbf{Strengths:} The fog layer can buffer MQTT bursts and emit coherent envelopes; the cloud API is narrow and testable; static hosting minimizes UI hosting cost.
+
+\textbf{Limitations:} Without a shared database, serverless reads may miss data written on other Lambda instances---mitigated by Turso. The simulator is not a hardware driver; real sensors would add calibration, clock sync, and failure modes. Security is appropriate for coursework (broad CORS, no auth on ingest) but would require authentication, rate limiting, and private networking in production.
+
+\section{Implementation}
+
+\subsection{Software components}
+\begin{itemize}
+  \item \textbf{Dashboard:} Next.js~16 (App Router), React~19, Tailwind CSS~4, Recharts for trends, Lucide icons. Client components use custom hooks (e.g., \texttt{useSensorData}, \texttt{useBackendSensorReadings}) that call \texttt{publicApiUrl()} so that in development the browser uses relative \texttt{/api/...} paths while in production requests target the API Gateway base URL from \texttt{NEXT\_PUBLIC\_API\_URL}. Polling intervals in the UI (on the order of 2--3~s for key panels) are independent of sensor simulation cadence and only govern how often the browser refreshes charts.
+  \item \textbf{Cloud API (Lambda):} Node.js~20, bundled with esbuild from \texttt{services/lambda-api/handler.ts}; uses shared modules for ingest processing and sensor storage.
+  \item \textbf{Sensor store:} In-memory ring buffers per type with optional Turso persistence (\texttt{@libsql/client}).
+  \item \textbf{Fog and simulator:} TypeScript services using \texttt{mqtt} for broker mode; HTTP mode for simplified local runs (\texttt{npm run dev:all}).
+  \item \textbf{Infrastructure as code:} AWS SAM template (\texttt{infra/sam/template.yaml}) defines HTTP API, Lambda, and parameters for Turso and Redis (reserved for future queue-based ingest).
+\end{itemize}
+
+\subsection{Static export and build pipeline}
+Production UI builds use \texttt{STATIC\_EXPORT=true} with Next.js \texttt{output: 'export'}. App Router API routes under \texttt{app/api} are incompatible with static export; the project uses a build helper script that temporarily renames \texttt{route.ts} files during the export build so that HTML and hashed assets under \texttt{out/} are generated without conflicting with dynamic route semantics. The resulting site is suitable for Amplify Hosting or any static file host.
+
+\subsection{Ingest and data model}
+Fog envelopes include \texttt{fogNodeId}, \texttt{receivedAt}, and an array of readings. Each reading carries \texttt{sensorId}, \texttt{sensorType}, timestamp, value, and optional location---aligned with a small shared TypeScript schema for end-to-end typing. The ingest processor validates and calls \texttt{addReadings}; the read API merges memory and Turso when configured.
+
+\subsection{Libraries (selected)}
+\texttt{next}, \texttt{react}, \texttt{recharts}, \texttt{mqtt}, \texttt{@libsql/client}, \texttt{bullmq}/\texttt{ioredis} (pipeline/worker paths), \texttt{esbuild} (Lambda bundle), \texttt{eslint} (quality).
+
+\subsection{Continuous integration and deployment}
+Local workflow: \texttt{npm run lint} and \texttt{npm run build:all} (Next build, Lambda bundle, static export script). Cloud deployment paths include:
+\begin{itemize}
+  \item \textbf{API:} \texttt{build:lambda} plus \texttt{sam deploy} or CloudFormation \texttt{package}/\texttt{deploy} with stack outputs (\texttt{HttpApiUrl}).
+  \item \textbf{Frontend:} \texttt{amplify.yml} runs Node~20, \texttt{npm ci}, and \texttt{npm run build:amplify}; artifacts from \texttt{out/}. Environment variable \texttt{NEXT\_PUBLIC\_API\_URL} must match the API base URL.
+\end{itemize}
+Manual Amplify Hosting deployments may use per-file upload maps to ensure \texttt{\_next/static} assets publish correctly. The repository is intended for Git hosting; \textbf{replace the placeholder below with your public GitHub URL} after pushing:
+
+\begin{center}
+\url{https://github.com/YOUR_USERNAME/YOUR_REPO}
+\end{center}
+
+\section{Related Work and Positioning}
+Industrial IoT and \emph{data center infrastructure management} (DCIM) systems routinely combine telemetry, alarming, and historical analytics~\cite{buyya2016fog}. Commercial platforms often rely on proprietary agents and northbound APIs; academic prototypes frequently emphasize open protocols (e.g., MQTT) and reproducible stacks~\cite{yi2015survey}. ThermoSentinel aligns with the latter: it foregrounds protocol-level transparency (topic naming, HTTP ingest) so that students can trace data from publisher to dashboard.
+
+Compared with pure cloud ingestion, introducing a fog tier reduces exposure of raw device churn to wide-area links and allows local validation before forwarding~\cite{vaquero2014research}. Our fog node optionally subscribes to a hierarchical topic space (\texttt{library/sensors/\ldots}) and periodically flushes buffered readings to the cloud, trading a small delay for fewer HTTP requests. This mirrors common edge-gateway behavior, albeit at classroom scale.
+
+Serverless backends for IoT dashboards are increasingly common because they map naturally to spiky request patterns~\cite{baldini2017serverless}. Elasticity and pay-per-use remain defining cloud properties~\cite{armbrust2010cloud}; our split UI/API deployment exploits those properties for the student demo workload. We position ThermoSentinel as a teaching artifact that makes explicit the contract between a static SPA, a regional API endpoint, and optional serverless-friendly SQL~\cite{libsql2024}, rather than hiding integration behind a single PaaS vendor.
+
+\section{Analytics, Risk Scoring, and Fog Behavior}
+\subsection{Rack-level visualization and risk model}
+The dashboard maps backend readings onto a fixed grid of racks and sensors (e.g., fifteen logical slots). Per-sensor status is derived from temperature thresholds used in the UI: readings above a warning band mark \emph{warning}, and above a critical band mark \emph{critical}. A simple aggregate \emph{system risk score} is computed as a capped sum of per-sensor contributions---higher weight for critical than warning---so that operators see a single scalar alongside raw charts. Formally, let $n_w$ and $n_c$ denote counts of sensors in warning and critical states respectively; the implemented heuristic follows
+\begin{equation}
+R = \min\bigl(100,\; 15\,n_w + 40\,n_c\bigr).
+\label{eq:risk}
+\end{equation}
+Equation~\eqref{eq:risk} is illustrative rather than normative: real facilities would calibrate thresholds per aisle, workload, and season. The UI also supports \emph{scenario toggles} (e.g., simulated AC failure) to stress-test visualization and alerting narratives without changing backend code.
+
+\subsection{Fog node and MQTT path}
+In MQTT mode, the simulator publishes JSON payloads to topics rooted at a configurable prefix; the fog node subscribes with a wildcard filter and parses messages into validated readings. A periodic flush timer (default 2~s) ships batched readings as a single envelope when the buffer reaches a cap or on schedule---reducing cloud POST frequency while bounding latency. HTTP mode instead accepts POST \texttt{/ingest} on the fog service for simpler classroom setups without a broker.
+
+\subsection{Dashboard--backend cadence}
+The browser polls sensor REST endpoints every few seconds for charts and cards. This cadence is \emph{independent} of physical or simulated sample intervals: the UI may refresh faster than sensors uplink, showing the last known values until new data arrive. Such decoupling is deliberate: it separates human-facing responsiveness from field-device power and bandwidth constraints.
+
+\section{Security, Privacy, and Trust Boundaries}
+Course deployments intentionally prioritize accessibility: CORS may allow any origin and ingest endpoints may be unauthenticated so that teams can integrate quickly~\cite{owasp2023api}. A production deployment would introduce at least: (1)~mutual TLS or signed tokens between fog and cloud; (2)~API keys or OAuth for dashboard reads if data is sensitive; (3)~rate limiting and request size caps on \texttt{/api/ingest}; (4)~private subnets or VPC endpoints for Lambda where required; (5)~audit logging and retention policies aligned with GDPR or sector rules when personal data appear (typically not for pure environmental telemetry, but site metadata might be).
+
+From a \emph{availability} perspective, exposing ingest over public HTTPS shifts abuse risk (flooding, payload bombs). Mitigations include AWS WAF in front of API Gateway, Lambda concurrency limits, and schema validation early in the handler---already partially reflected in envelope checks.
+
+\section{Testing, Validation, and Reproducibility}
+\textbf{Local integration:} Running \texttt{npm run dev:all} exercises the Next app, fog HTTP server, and simulator together, enabling end-to-end debugging with breakpoints in TypeScript. \textbf{Contract checks:} Health (\texttt{GET /api/health}) confirms the cloud path; sample \texttt{GET} requests to \texttt{/api/sensors/temperature/readings} validate JSON shape. \textbf{Cloud smoke tests:} After deployment, automated or manual HTTP checks should verify both HTML 200 and hashed asset URLs under \texttt{\_next/static}, not only the landing page---a lesson learned when static assets were omitted from an archive upload.
+
+\textbf{Reproducibility:} Pinning Node~20, documenting environment variables (\texttt{CLOUD\_URL}, \texttt{NEXT\_PUBLIC\_API\_URL}, Turso parameters), and versioning the SAM template supports reruns months later. Containerizing the fog and simulator would further reduce ``works on my machine'' drift for peer review.
+
+\section{Results and discussion}
+The integrated stack demonstrates end-to-end flow from simulated sensors through fog to cloud storage and visualization. In local mode, a single \texttt{npm run dev} session serves both UI and API routes, which simplifies debugging. In cloud mode, the dashboard consumes the same logical endpoints via absolute URLs, validating that the API contract is stable across environments.
+
+\textbf{Performance and UX:} API Gateway HTTP APIs add low overhead for JSON payloads typical of telemetry batches~\cite{amazon2024apigw}. The dashboard's polling model is simple and robust for coursework; a production system might adopt WebSockets or server-sent events for push updates at the cost of infrastructure complexity.
+
+\textbf{Trade-offs:} Lambda cold starts can add latency to occasional requests; the health endpoint helps operators verify availability. Without Turso (or another shared store), readings written in one execution environment may not appear in reads served by another---a fundamental consideration for horizontally scaled stateless functions~\cite{amazon2024lambda}. The documentation recommends Turso for ``serious'' demos.
+
+\textbf{Deployment lessons:} Static hosting requires that all assets under \texttt{\_next/static} be published; zip-based manual uploads occasionally omitted nested paths, which manifested as missing CSS until per-file deployment was used. This underscores that CI/CD validation should include HTTP checks for hashed chunk URLs, not only the HTML document.
+
+\section{Future Work}
+Short-term improvements include: Turso-backed persistence by default in deployed Lambdas; integration tests in CI (\texttt{npm run lint} plus a minimal HTTP harness); infrastructure diagrams generated from the SAM template; and optional authentication for the read API. Medium-term work could add structured alerting (e.g., smoke above threshold $\rightarrow$ webhook or SNS topic) and anomaly detection on sliding windows. Longer-term extensions might include digital twin overlays for rack layout, export to time-series stores (InfluxDB, Amazon Timestream) for fleet-scale analytics, or MQTT~5 features where brokers support them.
+
+\section{Conclusions}
+ThermoSentinel successfully combines edge--fog--cloud concepts with a deployable AWS serverless backend and a modern web frontend. The architecture balances cost, clarity, and educational transparency: developers can run everything locally, then map the same APIs to managed services without rewriting business logic.
+
+Principal findings are: (1)~separating static UI and API is appropriate for serverless course projects; (2)~shared TypeScript modules between Lambda and Next reduce duplication; (3)~explicit sensor timing policy improves the credibility of the simulation; (4)~external SQL compatible with serverless (libSQL/Turso) is the clearest path to durable multi-tenant telemetry.
+
+\subsection{Reflection}
+Developing this project reinforced that \textbf{operational details}---static export constraints, CORS, correct publishing of \texttt{\_next} assets, optional databases for Lambda---matter as much as core algorithms. Early separation of UI and API base URLs avoided brittle same-origin assumptions when moving to Amplify. Config-driven sensor intervals aligned the simulator with intuitive physical rates (e.g., slow humidity vs.\ fast smoke). If repeated, we would add automated smoke tests against deployed URLs and parameterize Turso credentials in CI secrets from the first deployment.
+
+\section*{Acknowledgment}
+Optional: thank supervisors, cloud credits programs, or institution resources.
+
+\begin{thebibliography}{00}
+\bibitem{buyya2016fog}
+R. Buyya and S. Srirama, Eds., \emph{Fog and Edge Computing: Principles and Paradigms}. Hoboken, NJ, USA: Wiley, 2016.
+
+\bibitem{vaquero2014research}
+L. M. Vaquero and L. Rodero-Merino, ``Finding your way in the fog: Towards a comprehensive definition of fog computing,'' \emph{ACM SIGCOMM Comput. Commun. Rev.}, vol.~44, no.~5, pp.~27--32, 2014.
+
+\bibitem{yi2015survey}
+S. Yi, C. Li, and Q. Li, ``A survey of fog computing: Concepts, applications and issues,'' in \emph{Proc. Workshop Mobile Big Data}, 2015, pp.~37--42.
+
+\bibitem{baldini2017serverless}
+G. Baldini \emph{et al.}, ``Serverless computing: Current trends and open problems,'' in \emph{Advances in Service-Oriented and Cloud Computing}. Springer, 2017, pp.~1--20.
+
+\bibitem{amazon2024lambda}
+Amazon Web Services, ``AWS Lambda Developer Guide,'' 2024. [Online]. Available: \url{https://docs.aws.amazon.com/lambda/}
+
+\bibitem{amazon2024apigw}
+Amazon Web Services, ``Amazon API Gateway Developer Guide,'' 2024. [Online]. Available: \url{https://docs.aws.amazon.com/apigateway/}
+
+\bibitem{libsql2024}
+Turso / libSQL, ``libSQL Documentation,'' 2024. [Online]. Available: \url{https://docs.turso.tech/libsql}
+
+\bibitem{nextjs2025}
+Vercel, ``Next.js Documentation,'' 2025. [Online]. Available: \url{https://nextjs.org/docs}
+
+\bibitem{mqtt2014}
+OASIS, ``MQTT Version 3.1.1,'' OASIS Standard, 2014. [Online]. Available: \url{https://mqtt.org/}
+
+\bibitem{owasp2023api}
+OWASP Foundation, ``API Security Top 10,'' 2023. [Online]. Available: \url{https://owasp.org/www-project-api-security/}
+
+\bibitem{armbrust2010cloud}
+M. Armbrust \emph{et al.}, ``A view of cloud computing,'' \emph{Commun. ACM}, vol.~53, no.~4, pp.~50--58, 2010.
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "sensorType": {
+      "type": "string",
+      "enum": ["temperature", "humidity", "pressure", "airflow", "smoke"]
+    },
+    "baseSensorReading": {
+      "type": "object",
+      "required": ["sensorId", "sensorType", "ts"],
+      "properties": {
+        "sensorId": { "type": "string" },
+        "sensorType": { "$ref": "#/definitions/sensorType" },
+        "ts": { "type": "string", "format": "date-time" },
+        "location": { "type": "string" }
+      }
+    },
+    "temperatureReading": {
+      "allOf": [
+        { "$ref": "#/definitions/baseSensorReading" },
+        {
+          "properties": {
+            "sensorType": { "const": "temperature" },
+            "value": { "type": "number" },
+            "unit": { "const": "celsius" }
+          },
+          "required": ["value", "unit"]
+        }
+      ]
+    },
+    "humidityReading": {
+      "allOf": [
+        { "$ref": "#/definitions/baseSensorReading" },
+        {
+          "properties": {
+            "sensorType": { "const": "humidity" },
+            "value": { "type": "number" },
+            "unit": { "const": "percent" }
+          },
+          "required": ["value", "unit"]
+        }
+      ]
+    },
+    "pressureReading": {
+      "allOf": [
+        { "$ref": "#/definitions/baseSensorReading" },
+        {
+          "properties": {
+            "sensorType": { "const": "pressure" },
+            "value": { "type": "number" },
+            "unit": { "const": "hpa" }
+          },
+          "required": ["value", "unit"]
+        }
+      ]
+    },
+    "airflowReading": {
+      "allOf": [
+        { "$ref": "#/definitions/baseSensorReading" },
+        {
+          "properties": {
+            "sensorType": { "const": "airflow" },
+            "value": { "type": "number", "minimum": 0 },
+            "unit": { "const": "cfm" }
+          },
+          "required": ["value", "unit"]
+        }
+      ]
+    },
+    "smokeReading": {
+      "allOf": [
+        { "$ref": "#/definitions/baseSensorReading" },
+        {
+          "properties": {
+            "sensorType": { "const": "smoke" },
+            "value": { "type": "number", "minimum": 0, "maximum": 100 },
+            "unit": { "const": "index" }
+          },
+          "required": ["value", "unit"]
+        }
+      ]
+    },
+    "sensorReading": {
+      "oneOf": [
+        { "$ref": "#/definitions/temperatureReading" },
+        { "$ref": "#/definitions/humidityReading" },
+        { "$ref": "#/definitions/pressureReading" },
+        { "$ref": "#/definitions/airflowReading" },
+        { "$ref": "#/definitions/smokeReading" }
+      ]
+    },
+    "fogEnvelope": {
+      "type": "object",
+      "required": ["fogNodeId", "receivedAt", "readings"],
+      "properties": {
+        "fogNodeId": { "type": "string" },
+        "receivedAt": { "type": "string", "format": "date-time" },
+        "readings": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/sensorReading" }
+        }
+      }
+    }
+  },
+  "title": "Fog & Edge payload schema",
+  "description": "Sensor readings and fog envelope for edge → fog → cloud"
+}

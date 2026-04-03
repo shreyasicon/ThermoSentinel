@@ -1,0 +1,27 @@
+// ThermoSentinel — simple web + cloud flow
+
+title ThermoSentinel Architecture
+
+direction right
+
+User [icon: users]
+
+Amplify [icon: aws-Amplify, label: "Static website (dashboard)"]
+
+Api [icon: aws-api-gateway] {
+  ApiGateway [icon: aws-api-gateway, label: "HTTP API"]
+  Lambda [icon: aws-lambda, label: "API — health, ingest, readings"]
+}
+
+Fog [icon: server, label: "Fog node (+ sensor simulator)"]
+
+Database [icon: database, label: "Turso (libSQL) — optional"]
+
+// Flows
+User > Amplify: open dashboard
+User > ApiGateway: HTTPS /api/*
+
+Fog > ApiGateway: POST readings
+
+ApiGateway > Lambda: invoke
+Lambda <> Database: store & read sensor data

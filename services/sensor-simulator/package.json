@@ -1,0 +1,11 @@
+{
+  "name": "sensor-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types index.ts",
+    "dev": "npx tsx index.ts"
+  },
+  "dependencies": {}
+}
