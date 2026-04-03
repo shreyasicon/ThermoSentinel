@@ -1,7 +1,7 @@
 'use client';
 
 import { Sensor } from '@/hooks/useSensorData';
-import { getStatusBadgeClass, getTemperatureGauge } from '@/lib/thermoutils';
+import { formatTemperatureCelsius, getStatusBadgeClass, getTemperatureGauge } from '@/lib/thermoutils';
 
 interface SensorCardProps {
   sensor: Sensor;
@@ -34,7 +34,7 @@ export default function SensorCard({ sensor }: SensorCardProps) {
         <div>
           <div className="flex justify-between text-sm mb-1">
             <span>Temperature</span>
-            <span className="font-semibold">{sensor.temperature}°C</span>
+            <span className="font-semibold">{formatTemperatureCelsius(sensor.temperature)}°C</span>
           </div>
           <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden">
             <div

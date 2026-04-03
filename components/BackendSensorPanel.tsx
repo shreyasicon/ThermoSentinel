@@ -1,6 +1,7 @@
 'use client';
 
 import { useBackendSensorReadings } from '@/hooks/useBackendSensorReadings';
+import { formatTemperatureCelsius } from '@/lib/thermoutils';
 import type { SensorType } from '@/shared/schema/types';
 
 const SENSOR_LABELS: Record<SensorType, string> = {
@@ -20,8 +21,12 @@ type BackendReading = {
   location?: string;
 };
 
-function formatReading(r: BackendReading): string {
-  if ('value' in r && r.value !== undefined) return `${r.value} ${r.unit ?? ''}`.trim();
+function formatReading(r: BackendReading, sensorType: SensorType): string {
+  if ('value' in r && r.value !== undefined) {
+    const display =
+      sensorType === 'temperature' ? formatTemperatureCelsius(r.value) : String(r.value);
+    return `${display} ${r.unit ?? ''}`.trim();
+  }
   return '—';
 }
 
@@ -43,10 +48,12 @@ function SensorTypeRow({ type }: { type: SensorType }) {
   const peak = numericValues.length ? Math.max(...numericValues) : null;
   const unit = type === 'temperature' ? '°C' : type === 'humidity' ? '%' : type === 'pressure' ? ' hPa' : type === 'airflow' ? ' cfm' : type === 'smoke' ? ' index' : '';
 
+  const fmtMetric = (n: number) =>
+    type === 'temperature' ? formatTemperatureCelsius(n) : n.toFixed(1);
   const mainFeature =
     avg != null && peak != null ? (
       <span className="text-cyan-400 font-semibold tabular-nums">
-        Avg {avg.toFixed(1)}{unit} · Peak {peak.toFixed(1)}{unit}
+        Avg {fmtMetric(avg)}{unit} · Peak {fmtMetric(peak)}{unit}
       </span>
     ) : null;
 
@@ -72,13 +79,13 @@ function SensorTypeRow({ type }: { type: SensorType }) {
               </span>
             )}
             <span className="text-white/70">
-              Latest: {latest ? formatReading(latest) : '—'}
+              Latest: {latest ? formatReading(latest, type) : '—'}
             </span>
             {sensorEntries.length > 0 && (
               <span className="text-white/50 text-xs">
                 {sensorEntries.map(([id, r]) => (
                   <span key={id} className="mr-3 inline">
-                    {id}: <span className="tabular-nums text-white/70">{formatReading(r)}</span>
+                    {id}: <span className="tabular-nums text-white/70">{formatReading(r, type)}</span>
                   </span>
                 ))}
               </span>

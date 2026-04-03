@@ -1,7 +1,7 @@
 'use client';
 
 import { SystemMetrics } from '@/hooks/useSensorData';
-import { getRiskColor, calculateSystemHealth } from '@/lib/thermoutils';
+import { formatTemperatureCelsius, getRiskColor, calculateSystemHealth } from '@/lib/thermoutils';
 
 interface SystemMetricsDisplayProps {
   metrics: SystemMetrics;
@@ -23,12 +23,12 @@ export default function SystemMetricsDisplay({ metrics }: SystemMetricsDisplayPr
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 items-stretch">
       <div className={cardBase}>
         <p className="text-sm text-white/60 mb-2">Average Temperature</p>
-        <p className="text-3xl font-bold text-cyan-400 mt-auto">{metrics.avgTemperature}°C</p>
+        <p className="text-3xl font-bold text-cyan-400 mt-auto">{formatTemperatureCelsius(metrics.avgTemperature)}°C</p>
       </div>
 
       <div className={cardBase}>
         <p className="text-sm text-white/60 mb-2">Peak Temperature</p>
-        <p className="text-3xl font-bold text-orange-400 mt-auto">{metrics.maxTemperature}°C</p>
+        <p className="text-3xl font-bold text-orange-400 mt-auto">{formatTemperatureCelsius(metrics.maxTemperature)}°C</p>
       </div>
 
       <div className={cardBase}>

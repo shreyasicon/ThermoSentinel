@@ -60,7 +60,7 @@ export function TemperatureVisual() {
               backgroundColor: 'rgba(15, 23, 42, 0.95)',
               border: '1px solid rgba(34, 211, 238, 0.3)',
             }}
-            formatter={(v: number) => [`${v.toFixed(1)} °C`, '']}
+            formatter={(v: number) => [`${v.toFixed(2)} °C`, '']}
           />
           <Line
             type="monotone"

@@ -1,3 +1,15 @@
+/** Store / compute with at most two decimal places. */
+export function roundTemperatureCelsius(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return parseFloat(n.toFixed(2));
+}
+
+/** Display °C with two decimal places (avoids long floats from APIs). */
+export function formatTemperatureCelsius(n: number): string {
+  if (!Number.isFinite(n)) return '0.00';
+  return n.toFixed(2);
+}
+
 export const getRiskColor = (risk: number): string => {
   if (risk >= 70) return 'bg-red-600/20 border-red-500/50 text-red-200';
   if (risk >= 40) return 'bg-yellow-600/20 border-yellow-500/50 text-yellow-200';

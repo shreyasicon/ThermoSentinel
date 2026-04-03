@@ -36,7 +36,7 @@ export default function TemperatureTrends() {
           <Tooltip
             contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(255, 255, 255, 0.2)' }}
             labelStyle={{ color: '#fff' }}
-            formatter={(value: number) => [`${value.toFixed(1)}°C`, 'Temperature']}
+            formatter={(value: number) => [`${value.toFixed(2)}°C`, 'Temperature']}
           />
           <Legend wrapperStyle={{ color: 'rgba(255, 255, 255, 0.8)' }} />
           <Line
