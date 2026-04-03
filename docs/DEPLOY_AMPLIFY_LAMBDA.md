@@ -61,6 +61,8 @@ sam deploy --template-file infra/sam/template.yaml --stack-name thermosentinel-a
 
 The build runs **`npm run build:amplify`**, which sets `STATIC_EXPORT=true` and emits static files under **`out/`** (see `next.config.mjs`).
 
+**Manual ZIP upload (CLI):** On Windows, do **not** use `Compress-Archive` for the `out/` folder — it embeds backslash paths and Amplify’s Linux extractor can omit **`_next/static`**, so the page is **unstyled** (CSS/JS 404). After **`npm run build:amplify`**, run **`npm run zip:out`** (uses **archiver** with forward-slash paths), then upload **`amplify-manual.zip`** via `aws amplify create-deployment` / `start-deployment`.
+
 ## 4. Local development (unchanged)
 
 - `npm run dev` — Next serves UI and `/api` on one origin; with **Local API** selected in the UI, the browser uses same-origin `/api/...` (no env needed). When testing the **Amplify** URL against your laptop, choose **Local API** and run Next locally; configure **`ALLOWED_API_ORIGINS`** on the local app if the browser reports CORS errors.

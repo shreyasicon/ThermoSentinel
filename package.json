@@ -15,6 +15,7 @@
     "worker": "tsx scripts/ingest-worker.ts",
     "deploy:aws": "node scripts/deploy.mjs",
     "build:amplify": "node scripts/build-amplify.mjs",
+    "zip:out": "node scripts/zip-static-out.mjs",
     "build:lambda": "node scripts/build-lambda.mjs",
     "build:all": "npm run lint && npm run build && npm run build:lambda && npm run build:amplify",
     "deploy:sam": "node scripts/build-lambda.mjs && sam deploy --template-file infra/sam/template.yaml --stack-name thermosentinel-api --resolve-s3 --capabilities CAPABILITY_IAM --no-confirm-changeset --no-fail-on-empty-changeset",
