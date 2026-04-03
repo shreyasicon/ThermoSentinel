@@ -10,11 +10,23 @@
 
 export type ApiBackendMode = 'local' | 'lambda';
 
+/**
+ * When running `next dev`, NEXT_PUBLIC_* is often unset, so Lambda mode would still
+ * resolve to same-origin local /api — the toggle did nothing. Use this only in development.
+ * Production builds rely on NEXT_PUBLIC_LAMBDA_API_URL / NEXT_PUBLIC_API_URL (e.g. Amplify).
+ */
+const DEV_FALLBACK_LAMBDA_BASE = 'https://o7h4qh3gdg.execute-api.us-east-1.amazonaws.com';
+
 export function getLambdaApiBase(): string {
-  return (process.env.NEXT_PUBLIC_LAMBDA_API_URL || process.env.NEXT_PUBLIC_API_URL || '').replace(
+  const env = (process.env.NEXT_PUBLIC_LAMBDA_API_URL || process.env.NEXT_PUBLIC_API_URL || '').replace(
     /\/$/,
     '',
   );
+  if (env) return env;
+  if (process.env.NODE_ENV === 'development') {
+    return DEV_FALLBACK_LAMBDA_BASE;
+  }
+  return '';
 }
 
 /** Base URL for the machine-hosted Next API (or tunnel). */

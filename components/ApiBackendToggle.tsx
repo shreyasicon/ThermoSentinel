@@ -48,6 +48,12 @@ export default function ApiBackendToggle() {
           Run <span className="text-white/60 font-mono">npm run dev</span> locally for live numbers; no demo data.
         </p>
       )}
+      {mode === 'lambda' && (
+        <p className="text-[10px] text-white/40 leading-tight">
+          Calls the deployed API Gateway + Lambda URL (set{' '}
+          <span className="text-white/60 font-mono">NEXT_PUBLIC_LAMBDA_API_URL</span> to override).
+        </p>
+      )}
     </div>
   );
 }
