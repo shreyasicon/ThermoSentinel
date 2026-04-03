@@ -7,6 +7,7 @@ __v0_jsx-dev-runtime.ts
 node_modules/
 dist/
 deploy/*.zip
+amplify-manual.zip
 .aws-sam/
 .next/
 out/
