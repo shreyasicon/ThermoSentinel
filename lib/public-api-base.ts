@@ -11,20 +11,15 @@
 export type ApiBackendMode = 'local' | 'lambda';
 
 /**
- * Default HTTP API base when env is missing. Covers:
- * - `next dev` without .env.local (Lambda toggle would otherwise hit local /api only)
- * - Static zip manual deploys where NEXT_PUBLIC_* was not available at build time
- * Override with NEXT_PUBLIC_LAMBDA_API_URL or NEXT_PUBLIC_API_URL (e.g. Amplify Console).
+ * Lambda/API Gateway base URL from build-time env (required for Amplify static hosting).
+ * Set `NEXT_PUBLIC_LAMBDA_API_URL` in Amplify Console (same as CloudFormation `HttpApiUrl`, no trailing slash).
+ * No default URL — avoids calling someone else’s API by mistake.
  */
-const DEFAULT_LAMBDA_API_BASE = 'https://o7h4qh3gdg.execute-api.us-east-1.amazonaws.com';
-
 export function getLambdaApiBase(): string {
-  const env = (process.env.NEXT_PUBLIC_LAMBDA_API_URL || process.env.NEXT_PUBLIC_API_URL || '').replace(
+  return (process.env.NEXT_PUBLIC_LAMBDA_API_URL || process.env.NEXT_PUBLIC_API_URL || '').replace(
     /\/$/,
     '',
   );
-  if (env) return env;
-  return DEFAULT_LAMBDA_API_BASE;
 }
 
 /** Base URL for the machine-hosted Next API (or tunnel). */

@@ -29,9 +29,22 @@ export function ApiBackendProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const s = localStorage.getItem(STORAGE_KEY);
-      if (s === 'lambda' || s === 'local') setModeState(s);
+      if (s === 'lambda' || s === 'local') {
+        setModeState(s);
+        return;
+      }
     } catch {
       /* ignore */
+    }
+    // Hosted UI (e.g. Amplify): default to Lambda when the API URL was baked in at build time.
+    const baked =
+      typeof process !== 'undefined' &&
+      (process.env.NEXT_PUBLIC_LAMBDA_API_URL || process.env.NEXT_PUBLIC_API_URL);
+    if (baked && typeof window !== 'undefined') {
+      const h = window.location.hostname;
+      if (h.includes('amplifyapp.com') || h.endsWith('.amplifyaws.com')) {
+        setModeState('lambda');
+      }
     }
   }, []);
 
