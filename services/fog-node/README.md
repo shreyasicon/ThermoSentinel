@@ -6,7 +6,7 @@ Receives sensor data from the sensor simulator, validates and processes it, then
 
 | Env | Default | Description |
 |-----|---------|--------------|
-| `PORT` | 4000 | HTTP server port |
+| `FOG_PORT` | 4000 | HTTP server port (not `PORT` — Next.js often sets `PORT=3000` in `.env`) |
 | `CLOUD_URL` | `http://localhost:3000/api/ingest` | Cloud backend ingest endpoint |
 | `FOG_NODE_ID` | fog-node-1 | Node identifier |
 

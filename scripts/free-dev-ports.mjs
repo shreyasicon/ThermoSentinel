@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Frees local dev ports and stale Next lock so `npm run dev:all` can start cleanly.
+ * Frees local dev ports and stale Next lock so `npm run dev` / `dev:all` / `dev:pipeline` can start cleanly.
  * Run automatically before dev:all (see package.json).
  */
 import fs from 'node:fs';

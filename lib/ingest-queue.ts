@@ -32,6 +32,13 @@ function startInMemoryConsumer() {
 
 /** Push envelope to the appropriate queue (in-memory or Redis). Returns immediately. */
 export async function pushIngest(envelope: FogEnvelope): Promise<void> {
+  // `next dev`: always process in this Node process so GET /api/sensors/* sees the same in-memory store.
+  // If REDIS_URL is set, Bull would otherwise enqueue only — no worker in dev → empty dashboard.
+  if (process.env.NODE_ENV === 'development' && process.env.INGEST_USE_REDIS_IN_DEV !== 'true') {
+    await processIngestEnvelope(envelope);
+    return;
+  }
+
   const redisUrl = process.env.REDIS_URL;
   if (redisUrl) {
     try {

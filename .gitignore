@@ -12,4 +12,7 @@ amplify-manual.zip
 .next/
 out/
 .env*.local
+.env.iot.generated
+deploy/thermosentinel-api.env.generated
+certs/
 .DS_Store

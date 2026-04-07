@@ -10,9 +10,9 @@ interface SystemMetricsDisplayProps {
 export default function SystemMetricsDisplay({ metrics }: SystemMetricsDisplayProps) {
   const health = calculateSystemHealth(metrics.systemRiskScore);
   const healthColor =
-    metrics.systemRiskScore >= 70
+    metrics.systemRiskScore > 70
       ? 'text-red-400'
-      : metrics.systemRiskScore >= 40
+      : metrics.systemRiskScore > 30
         ? 'text-yellow-400'
         : 'text-green-400';
 

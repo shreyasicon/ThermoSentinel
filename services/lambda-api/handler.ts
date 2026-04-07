@@ -1,12 +1,13 @@
 /**
- * Single Lambda behind API Gateway HTTP API — mirrors Next.js routes:
- * GET /api/health, POST /api/ingest, GET /api/sensors/{type}/readings
- *
- * For production serverless, set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN so reads/writes
- * survive cold starts and concurrent executions. In-memory only is best-effort on Lambda.
+ * Single Lambda: HTTP API (health, ingest, readings) + optional SQS-triggered ingest (fog → queue → Lambda).
  */
 
-import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
+import type {
+  APIGatewayProxyEventV2,
+  APIGatewayProxyResultV2,
+  SQSEvent,
+  SQSBatchResponse,
+} from 'aws-lambda';
 import { getReadingsAsync } from '../../lib/sensor-store';
 import { processIngestEnvelope } from '../../lib/ingest-processor';
 import type { FogEnvelope, SensorType } from '../../shared/schema/types';
@@ -22,7 +23,7 @@ const VALID_TYPES: SensorType[] = [
 function json(
   statusCode: number,
   body: unknown,
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
 ): APIGatewayProxyResultV2 {
   return {
     statusCode,
@@ -34,7 +35,38 @@ function json(
   };
 }
 
-export async function handler(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
+function isSqsEvent(event: unknown): event is SQSEvent {
+  if (!event || typeof event !== 'object') return false;
+  const r = (event as { Records?: unknown }).Records;
+  if (!Array.isArray(r) || r.length === 0) return false;
+  return (r[0] as { eventSource?: string }).eventSource === 'aws:sqs';
+}
+
+async function handleSqs(event: SQSEvent): Promise<SQSBatchResponse> {
+  const batchItemFailures: { itemIdentifier: string }[] = [];
+  for (const record of event.Records) {
+    const id = record.messageId ?? '';
+    try {
+      const parsed = JSON.parse(record.body) as unknown;
+      const envelope = parsed as FogEnvelope;
+      if (
+        typeof envelope?.fogNodeId !== 'string' ||
+        typeof envelope?.receivedAt !== 'string' ||
+        !Array.isArray(envelope?.readings)
+      ) {
+        batchItemFailures.push({ itemIdentifier: id });
+        continue;
+      }
+      const result = await processIngestEnvelope(envelope);
+      if (!result.ok) batchItemFailures.push({ itemIdentifier: id });
+    } catch {
+      batchItemFailures.push({ itemIdentifier: id });
+    }
+  }
+  return { batchItemFailures };
+}
+
+async function handleHttp(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const method = event.requestContext?.http?.method ?? 'GET';
   const rawPath = event.rawPath ?? '';
   const qs = event.rawQueryString ?? '';
@@ -43,7 +75,11 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     return json(200, {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      queue: process.env.REDIS_URL ? 'redis' : 'memory',
+      queue: process.env.INGEST_QUEUE_URL
+        ? 'sqs'
+        : process.env.REDIS_URL
+          ? 'redis'
+          : 'memory',
     });
   }
 
@@ -78,7 +114,7 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     return json(
       202,
       { accepted: result.accepted, queued: false },
-      { 'cache-control': 'no-store' }
+      { 'cache-control': 'no-store' },
     );
   }
 
@@ -104,9 +140,18 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
       { type, readings },
       {
         'cache-control': 'no-store, no-cache, must-revalidate',
-      }
+      },
     );
   }
 
   return json(404, { error: 'Not found' });
+}
+
+export async function handler(
+  event: APIGatewayProxyEventV2 | SQSEvent,
+): Promise<APIGatewayProxyResultV2 | SQSBatchResponse> {
+  if (isSqsEvent(event)) {
+    return handleSqs(event);
+  }
+  return handleHttp(event as APIGatewayProxyEventV2);
 }

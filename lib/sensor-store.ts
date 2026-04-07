@@ -1,9 +1,13 @@
 /**
  * Sensor readings store for cloud backend.
- * Uses Turso (libsql) when TURSO_DATABASE_URL + TURSO_AUTH_TOKEN are set (production);
- * otherwise in-memory (dev / no DB configured).
+ * Priority: DynamoDB (DYNAMODB_READINGS_TABLE) → Turso → in-memory.
  */
 
+import {
+  dynamoAddReadings,
+  dynamoGetReadings,
+  isDynamoConfigured,
+} from './dynamo-readings';
 import type { SensorReading, SensorType } from '../shared/schema/types';
 
 const MAX_READINGS_PER_TYPE = 1000;
@@ -92,6 +96,14 @@ function memoryAddReadings(readings: SensorReading[]): void {
 
 export async function addReadings(readings: SensorReading[]): Promise<void> {
   memoryAddReadings(readings);
+  if (isDynamoConfigured()) {
+    try {
+      await dynamoAddReadings(readings);
+    } catch (err) {
+      console.error('DynamoDB addReadings error:', err);
+    }
+    return;
+  }
   const client = getTurso();
   if (client) {
     try {
@@ -165,6 +177,26 @@ export async function getReadingsAsync(
   type: SensorType,
   options: { from?: string; to?: string; limit?: number } = {}
 ): Promise<SensorReading[]> {
+  if (isDynamoConfigured()) {
+    try {
+      const fromDynamo = await dynamoGetReadings(type, options);
+      const fromMemory = memoryGetReadings(type, options);
+      const byKey = new Map<string, SensorReading>();
+      for (const r of [...fromMemory, ...fromDynamo]) {
+        const key = `${r.ts}-${r.sensorId}`;
+        if (!byKey.has(key)) byKey.set(key, r);
+      }
+      const merged = [...byKey.values()].sort(
+        (a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime()
+      );
+      const limit = options.limit ?? 100;
+      return merged.slice(-limit).reverse();
+    } catch (err) {
+      console.error('DynamoDB getReadings error:', err);
+      return memoryGetReadings(type, options);
+    }
+  }
+
   const fromMemory = memoryGetReadings(type, options);
   const client = getTurso();
   if (!client) return fromMemory;

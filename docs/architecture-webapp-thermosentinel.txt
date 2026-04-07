@@ -14,6 +14,7 @@ Api [icon: aws-api-gateway] {
 }
 
 Fog [icon: server, label: "Fog node (+ sensor simulator)"]
+Iot [icon: aws-iot-core, label: "Optional: AWS IoT Core MQTT broker"]
 
 Database [icon: database, label: "Turso (libSQL) — optional"]
 
@@ -21,6 +22,8 @@ Database [icon: database, label: "Turso (libSQL) — optional"]
 User > Amplify: open dashboard
 User > ApiGateway: HTTPS /api/*
 
+Edge > Iot: MQTT pub/sub (JSON)
+Iot > Fog: subscribe sensors/*
 Fog > ApiGateway: POST readings
 
 ApiGateway > Lambda: invoke

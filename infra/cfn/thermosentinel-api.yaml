@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ThermoSentinel API — HTTP API + Lambda + SQS ingest + SNS ops (no SAM; use scripts/cfn-deploy-api.mjs)
+
+Parameters:
+  LambdaCodeBucket:
+    Type: String
+    Description: S3 bucket containing the deployment zip (uploaded by cfn-deploy-api.mjs)
+  LambdaCodeKey:
+    Type: String
+    Description: S3 key of the Lambda zip (handler.js at archive root)
+  TursoDatabaseUrl:
+    Type: String
+    Default: ''
+    Description: Optional Turso/libSQL URL
+  TursoAuthToken:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: Optional Turso auth token
+  RedisUrl:
+    Type: String
+    Default: ''
+    Description: Optional REDIS_URL (reserved)
+  FogSenderPrincipalArn:
+    Type: String
+    Default: ''
+    Description: Optional IAM user/role ARN for sqs:SendMessage via queue resource policy (cross-account or explicit allow)
+  OpsAlertEmail:
+    Type: String
+    Default: ''
+    Description: Email address to subscribe to SNS ops topic for CRITICAL alerts (confirm subscription in inbox after deploy)
+
+Conditions:
+  HasFogSenderPrincipal: !Not [!Equals [!Ref FogSenderPrincipalArn, '']]
+  HasOpsAlertEmail: !Not [!Equals [!Ref OpsAlertEmail, '']]
+
+Resources:
+  ThermoHttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-http'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - '*'
+        AllowOrigins:
+          - '*'
+        MaxAge: 86400
+
+  IngestDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-ingest-dlq'
+      MessageRetentionPeriod: 1209600
+
+  IngestQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-ingest'
+      VisibilityTimeout: 120
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt IngestDLQ.Arn
+        maxReceiveCount: 5
+
+  IngestQueueSenderPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasFogSenderPrincipal
+    Properties:
+      Queues:
+        - !Ref IngestQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowFogSenderSendMessage
+            Effect: Allow
+            Principal:
+              AWS: !Ref FogSenderPrincipalArn
+            Action: sqs:SendMessage
+            Resource: !GetAtt IngestQueue.Arn
+
+  OpsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${AWS::StackName}-ops'
+      DisplayName: ThermoSentinel ops
+
+  OpsAlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasOpsAlertEmail
+    Properties:
+      Protocol: email
+      Endpoint: !Ref OpsAlertEmail
+      TopicArn: !Ref OpsTopic
+
+  ThermoReadingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-readings'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sensorType
+          AttributeType: S
+        - AttributeName: readingKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sensorType
+          KeyType: HASH
+        - AttributeName: readingKey
+          KeyType: RANGE
+
+  ThermoApiFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ThermoApiSqsSns
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt IngestQueue.Arn
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref OpsTopic
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:Query
+                Resource: !GetAtt ThermoReadingsTable.Arn
+
+  ThermoApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: nodejs20.x
+      Handler: handler.handler
+      Role: !GetAtt ThermoApiFunctionRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      Architectures:
+        - x86_64
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
+      Environment:
+        Variables:
+          TURSO_DATABASE_URL: !Ref TursoDatabaseUrl
+          TURSO_AUTH_TOKEN: !Ref TursoAuthToken
+          REDIS_URL: !Ref RedisUrl
+          DYNAMODB_READINGS_TABLE: !Ref ThermoReadingsTable
+          INGEST_QUEUE_URL: !Ref IngestQueue
+          SNS_OPS_TOPIC_ARN: !Ref OpsTopic
+          CRITICAL_TEMP_CELSIUS: '35'
+          CRITICAL_SMOKE_INDEX: '70'
+          CRITICAL_HUMIDITY_HIGH: '90'
+          CRITICAL_HUMIDITY_LOW: '10'
+
+  SqsIngestEventSource:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt IngestQueue.Arn
+      FunctionName: !Ref ThermoApiFunction
+      BatchSize: 10
+      MaximumBatchingWindowInSeconds: 5
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ThermoHttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ThermoApiFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  RouteHealth:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ThermoHttpApi
+      RouteKey: GET /api/health
+      Target: !Sub 'integrations/${HttpApiIntegration}'
+
+  RouteIngest:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ThermoHttpApi
+      RouteKey: POST /api/ingest
+      Target: !Sub 'integrations/${HttpApiIntegration}'
+
+  RouteSensorReadings:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ThermoHttpApi
+      RouteKey: GET /api/sensors/{type}/readings
+      Target: !Sub 'integrations/${HttpApiIntegration}'
+
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ThermoHttpApi
+      StageName: $default
+      AutoDeploy: true
+
+  ApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ThermoApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ThermoHttpApi}/*/*/*'
+
+Outputs:
+  HttpApiUrl:
+    Description: Base URL — set Amplify env NEXT_PUBLIC_API_URL (no trailing slash)
+    Value: !Sub 'https://${ThermoHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}'
+  HttpApiId:
+    Description: HTTP API ID
+    Value: !Ref ThermoHttpApi
+  FogIngestUrl:
+    Description: Direct HTTP ingest
+    Value: !Sub 'https://${ThermoHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/api/ingest'
+  IngestQueueUrl:
+    Description: Set FOG_SQS_QUEUE_URL on fog node
+    Value: !Ref IngestQueue
+  IngestQueueArn:
+    Description: Queue ARN
+    Value: !GetAtt IngestQueue.Arn
+  IngestDLQUrl:
+    Description: Dead-letter queue URL
+    Value: !Ref IngestDLQ
+  OpsTopicArn:
+    Description: SNS topic ARN
+    Value: !Ref OpsTopic
+  ReadingsTableName:
+    Description: DynamoDB table for sensor readings — set DYNAMODB_READINGS_TABLE for local Next.js if querying AWS
+    Value: !Ref ThermoReadingsTable

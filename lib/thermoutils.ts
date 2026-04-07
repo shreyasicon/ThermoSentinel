@@ -11,8 +11,8 @@ export function formatTemperatureCelsius(n: number): string {
 }
 
 export const getRiskColor = (risk: number): string => {
-  if (risk >= 70) return 'bg-red-600/20 border-red-500/50 text-red-200';
-  if (risk >= 40) return 'bg-yellow-600/20 border-yellow-500/50 text-yellow-200';
+  if (risk > 70) return 'bg-red-600/20 border-red-500/50 text-red-200';
+  if (risk > 30) return 'bg-yellow-600/20 border-yellow-500/50 text-yellow-200';
   return 'bg-green-600/20 border-green-500/50 text-green-200';
 };
 
@@ -38,8 +38,7 @@ export const getTemperatureGauge = (temp: number): { percentage: number; color: 
 };
 
 export const calculateSystemHealth = (riskScore: number): string => {
-  if (riskScore >= 70) return 'Critical';
-  if (riskScore >= 40) return 'Warning';
-  if (riskScore >= 20) return 'Caution';
-  return 'Optimal';
+  if (riskScore > 70) return 'Critical';
+  if (riskScore > 30) return 'Moderate';
+  return 'Low';
 };

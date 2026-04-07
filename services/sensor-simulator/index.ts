@@ -4,8 +4,18 @@
  * sample frequency and dispatch interval; sends batches to the fog node.
  */
 
+import '../../lib/load-env.js';
 import { connect } from 'mqtt';
-import { getEffectiveConfig, FOG_URL, MQTT_BROKER_URL, MQTT_TOPIC_ROOT, SENSOR_TRANSPORT } from './config.js';
+import { extraMqttTlsOptions } from '../../lib/mqtt-connect-options.js';
+import {
+  getEffectiveConfig,
+  FOG_URL,
+  MQTT_BROKER_URL,
+  MQTT_DATA_TOPIC,
+  MQTT_TOPIC_MODE,
+  MQTT_TOPIC_ROOT,
+  SENSOR_TRANSPORT,
+} from './config.js';
 import { generateReadings } from './generators.js';
 import type { SensorReading } from '../../shared/schema/types';
 
@@ -52,7 +62,7 @@ async function sendToFog(readings: SensorReading[]): Promise<void> {
       if (now - lastFogUnreachableLog >= FOG_UNREACHABLE_LOG_INTERVAL_MS) {
         lastFogUnreachableLog = now;
         console.error(
-          `Fog node unreachable at ${FOG_URL}. Run "npm run dev:all" to start app + fog + simulator together.`
+          `Fog node unreachable at ${FOG_URL}. Run "npm run dev" (or "npm run dev:all") to start app + fog + simulator together.`
         );
       }
     } else {
@@ -81,6 +91,16 @@ async function publishToMqtt(readings: SensorReading[]): Promise<void> {
     }
     return;
   }
+  if (MQTT_TOPIC_MODE === 'iot') {
+    const payload = JSON.stringify({ readings });
+    await new Promise<void>((resolve, reject) => {
+      mqttClient!.publish(MQTT_DATA_TOPIC, payload, { qos: 1 }, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    return;
+  }
   for (const r of readings) {
     const topic = topicForReading(r);
     const payload = JSON.stringify(r);
@@ -94,9 +114,15 @@ async function publishToMqtt(readings: SensorReading[]): Promise<void> {
 }
 
 function initMqttPublisher() {
+  const tls = extraMqttTlsOptions();
+  const clientId =
+    process.env.SIMULATOR_MQTT_CLIENT_ID ||
+    process.env.MQTT_CLIENT_ID ||
+    `sim-${Math.random().toString(16).slice(2, 10)}`;
   mqttClient = connect(MQTT_BROKER_URL, {
     reconnectPeriod: 3000,
-    clientId: `sim-${Math.random().toString(16).slice(2, 10)}`,
+    clientId,
+    ...tls,
   });
   mqttClient.on('connect', () => {
     if (mqttDisconnected) {
@@ -117,8 +143,24 @@ function run() {
   console.log('Sensor simulator starting');
   console.log('SENSOR_TRANSPORT:', SENSOR_TRANSPORT);
   if (SENSOR_TRANSPORT === 'mqtt') {
+    if (!MQTT_BROKER_URL) {
+      console.error(
+        'MQTT_BROKER_URL is required for SENSOR_TRANSPORT=mqtt.\n' +
+          'Set your AWS IoT Core device data endpoint (mqtts://…-ats.iot.REGION.amazonaws.com:8883) and PEM paths.\n' +
+          'See docs/AWS_IOT_CORE.md — or use SENSOR_TRANSPORT=http.',
+      );
+      process.exit(1);
+    }
     console.log('MQTT_BROKER_URL:', MQTT_BROKER_URL);
-    console.log('MQTT_TOPIC_ROOT:', MQTT_TOPIC_ROOT);
+    console.log('MQTT_TOPIC_MODE:', MQTT_TOPIC_MODE);
+    if (MQTT_TOPIC_MODE === 'iot') {
+      console.log('MQTT_DATA_TOPIC:', MQTT_DATA_TOPIC, '(JSON { readings: [...] })');
+    } else {
+      console.log('MQTT_TOPIC_ROOT:', MQTT_TOPIC_ROOT);
+    }
+    if (process.env.AWS_IOT_CA_PATH || process.env.MQTT_CA_PATH) {
+      console.log('MQTT TLS: using PEM files (AWS IoT Core / mqtts)');
+    }
     initMqttPublisher();
   } else {
     console.log('FOG_URL:', FOG_URL);

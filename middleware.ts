@@ -16,10 +16,30 @@ function getAllowedOrigins(): string[] {
   ];
 }
 
+function isDevTunnelOrigin(origin: string): boolean {
+  if (process.env.NODE_ENV !== 'development') return false;
+  try {
+    const { hostname } = new URL(origin);
+    const h = hostname.toLowerCase();
+    return (
+      h.endsWith('.ngrok-free.dev') ||
+      h.endsWith('.ngrok.io') ||
+      h.endsWith('.ngrok.app') ||
+      h.endsWith('.localtunnel.me') ||
+      h.endsWith('.loca.lt')
+    );
+  } catch {
+    return false;
+  }
+}
+
 function applyCors(request: NextRequest, response: NextResponse): NextResponse {
   const origin = request.headers.get('origin');
   const allowed = getAllowedOrigins();
-  if (origin && allowed.includes(origin)) {
+  const ok =
+    origin &&
+    (allowed.includes(origin) || isDevTunnelOrigin(origin));
+  if (ok && origin) {
     response.headers.set('Access-Control-Allow-Origin', origin);
     response.headers.set('Access-Control-Allow-Credentials', 'true');
   }

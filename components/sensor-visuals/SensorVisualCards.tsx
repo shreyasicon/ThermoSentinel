@@ -178,7 +178,7 @@ export function AirflowVisual() {
             minTickGap={28}
             interval="preserveStartEnd"
           />
-          <YAxis stroke="rgba(255,255,255,0.45)" domain={[400, 2200]} tick={{ fontSize: 11 }} />
+          <YAxis stroke="rgba(255,255,255,0.45)" domain={[200, 950]} tick={{ fontSize: 11 }} />
           <Tooltip
             contentStyle={{
               backgroundColor: 'rgba(15, 23, 42, 0.95)',

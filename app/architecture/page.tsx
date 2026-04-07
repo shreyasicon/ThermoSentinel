@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { useSensorData } from '@/hooks/useSensorData';
 import ArchitectureDiagram from '@/components/ArchitectureDiagram';
 import AlertSystem from '@/components/AlertSystem';
 import StatusDistribution from '@/components/StatusDistribution';
+import FogPipelinePanel from '@/components/FogPipelinePanel';
 import { ArrowLeft } from 'lucide-react';
 import ApiBackendToggle from '@/components/ApiBackendToggle';
 
@@ -34,7 +34,17 @@ export default function ArchitecturePage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <FogPipelinePanel />
+
         <ArchitectureDiagram />
+
+        <p className="text-sm text-white/55 mt-6 max-w-3xl">
+          Edge sensors publish JSON over MQTT; the fog layer can use <strong className="text-white/80">AWS IoT Core</strong> as the
+          broker (e.g. Thing <code className="text-cyan-300/90">mock-sensor-001</code>, topic{' '}
+          <code className="text-cyan-300/90">sensors/mock-sensor-001/data</code>). See repo docs{' '}
+          <code className="text-white/70">docs/ARCHITECTURE_EDGE_FOG_IOT.md</code> and{' '}
+          <code className="text-white/70">docs/AWS_IOT_CORE.md</code>.
+        </p>
 
         {/* Status Distribution */}
         <StatusDistribution metrics={metrics} />

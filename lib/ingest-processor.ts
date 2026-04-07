@@ -4,6 +4,7 @@
  * Keeps processing logic separate from HTTP/queue layer for scalability.
  */
 
+import { evaluateAndNotifyCritical } from './critical-alerts';
 import { addReadings } from './sensor-store';
 import type { FogEnvelope } from '../shared/schema/types';
 
@@ -27,6 +28,7 @@ export async function processIngestEnvelope(envelope: FogEnvelope): Promise<Proc
   }
   try {
     await addReadings(envelope.readings);
+    await evaluateAndNotifyCritical(envelope.readings, envelope.fogNodeId);
     return { accepted: envelope.readings.length, ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

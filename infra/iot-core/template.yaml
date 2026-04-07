@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ThermoSentinel IoT Core Things and policies for edge sensor and fog subscriber
+
+Parameters:
+  SensorThingName:
+    Type: String
+    Default: mock-sensor-001
+    Description: MQTT client ID for the sensor simulator (matches IoT Thing name)
+  FogThingName:
+    Type: String
+    Default: thermosentinel-fog
+    Description: MQTT client ID for the fog node subscriber
+
+Resources:
+  SensorThing:
+    Type: AWS::IoT::Thing
+    Properties:
+      ThingName: !Ref SensorThingName
+      AttributePayload:
+        Attributes:
+          role: sensor
+
+  FogThing:
+    Type: AWS::IoT::Thing
+    Properties:
+      ThingName: !Ref FogThingName
+      AttributePayload:
+        Attributes:
+          role: fog
+
+  # Publishes to sensors/<thing>/data — matches MQTT_TOPIC_MODE=iot + MQTT_DATA_TOPIC
+  SensorPolicy:
+    Type: AWS::IoT::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-sensor'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Connect
+            Effect: Allow
+            Action: iot:Connect
+            Resource: !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:client/${SensorThingName}'
+          - Sid: PublishData
+            Effect: Allow
+            Action: iot:Publish
+            Resource: !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/sensors/${SensorThingName}/data'
+          - Sid: ReceiveData
+            Effect: Allow
+            Action: iot:Receive
+            Resource: !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/sensors/${SensorThingName}/data'
+          - Sid: SubscribeOwn
+            Effect: Allow
+            Action: iot:Subscribe
+            Resource: !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/sensors/${SensorThingName}/#'
+
+  FogPolicy:
+    Type: AWS::IoT::Policy
+    Properties:
+      PolicyName: !Sub '${AWS::StackName}-fog'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Connect
+            Effect: Allow
+            Action: iot:Connect
+            Resource: !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:client/${FogThingName}'
+          - Sid: SubscribeAllSensors
+            Effect: Allow
+            Action: iot:Subscribe
+            Resource: !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/sensors/#'
+          - Sid: ReceiveAllSensors
+            Effect: Allow
+            Action: iot:Receive
+            Resource: !Sub 'arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/sensors/*'
+
+Outputs:
+  StackName:
+    Value: !Ref AWS::StackName
+  Region:
+    Value: !Ref AWS::Region
+  SensorThingName:
+    Value: !Ref SensorThingName
+    Description: Set SIMULATOR_MQTT_CLIENT_ID to this value
+  FogThingName:
+    Value: !Ref FogThingName
+    Description: Set FOG_MQTT_CLIENT_ID to this value
+  SensorPolicyName:
+    Value: !Ref SensorPolicy
+    Description: Attached to sensor certificate by provision script
+  FogPolicyName:
+    Value: !Ref FogPolicy
+    Description: Attached to fog certificate by provision script
+  MqttDataTopic:
+    Value: !Sub 'sensors/${SensorThingName}/data'
+    Description: MQTT_DATA_TOPIC when MQTT_TOPIC_MODE=iot
+  MqttTopicFilterHint:
+    Value: sensors/#
+    Description: Set MQTT_TOPIC_FILTER for the fog node

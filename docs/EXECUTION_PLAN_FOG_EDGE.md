@@ -76,7 +76,7 @@ This document outlines the plan to back ThermoSentinel with a full **sensor → 
   3. **Processes:** e.g. compute min/max/avg over a short window, or forward as-is.
   4. **Dispatches** to the cloud backend (HTTP to API, or push to a cloud queue).
 
-**Deployment:** Run as a container (e.g. Docker) or as a single process. For “virtual” fog, no real edge hardware is required; it can run on the same machine as the simulator or in a separate container/VM.
+**Deployment:** Run as a single OS process (typical for labs). For “virtual” fog, no real edge hardware is required; it can run on the same machine as the simulator or another host.
 
 **Deliverable:** A **fog-node** service with:
 - Configurable input (port, queue URL if used).

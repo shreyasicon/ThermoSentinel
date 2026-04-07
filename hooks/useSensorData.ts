@@ -54,25 +54,24 @@ function worseStatus(
 }
 
 const calculateRiskScore = (sensors: Sensor[]): number => {
-  let riskScore = 0;
-  sensors.forEach((sensor) => {
-    if (sensor.status === 'critical') riskScore += 40;
-    else if (sensor.status === 'warning') riskScore += 15;
-  });
-  return Math.min(100, riskScore);
+  const impacted = sensors.filter((s) => s.status === 'critical' || s.status === 'warning').length;
+  // Product requirement: score is impacted servers as a percentage of total monitored slots (15 by default).
+  return Math.round((impacted / TOTAL_SENSORS) * 100);
 };
 
 /** Extract latest value per sensorId from backend readings; return array for indexing by slot */
 function latestValuesFromReadings(
-  readings: Array<{ sensorId: string; value?: number }>,
+  readings: Array<{ sensorId: string; value?: number; ts?: string }>,
   slotCount: number
 ): number[] {
-  const byId = new Map<string, number>();
+  const byId = new Map<string, { value: number; ts: number }>();
   for (const r of readings) {
-    if (r.value != null && typeof r.value === 'number' && !byId.has(r.sensorId))
-      byId.set(r.sensorId, r.value);
+    if (r.value == null || typeof r.value !== 'number') continue;
+    const ts = r.ts ? new Date(r.ts).getTime() : 0;
+    const prev = byId.get(r.sensorId);
+    if (!prev || ts >= prev.ts) byId.set(r.sensorId, { value: r.value, ts });
   }
-  const values = [...byId.values()];
+  const values = [...byId.values()].map((x) => x.value);
   if (values.length === 0) return [];
   return Array.from({ length: slotCount }, (_, i) => values[i % values.length]);
 }
@@ -113,23 +112,41 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      const [tempRes, humRes, prsRes, airRes, smkRes] = await Promise.all([
-        fetch(publicApiUrl('/api/sensors/temperature/readings?limit=50'), {
-          cache: 'no-store',
-        }),
-        fetch(publicApiUrl('/api/sensors/humidity/readings?limit=50'), {
-          cache: 'no-store',
-        }),
-        fetch(publicApiUrl('/api/sensors/pressure/readings?limit=50'), {
-          cache: 'no-store',
-        }),
-        fetch(publicApiUrl('/api/sensors/airflow/readings?limit=50'), {
-          cache: 'no-store',
-        }),
-        fetch(publicApiUrl('/api/sensors/smoke/readings?limit=50'), {
-          cache: 'no-store',
-        }),
-      ]);
+      let tempRes: Response;
+      let humRes: Response;
+      let prsRes: Response;
+      let airRes: Response;
+      let smkRes: Response;
+      try {
+        [tempRes, humRes, prsRes, airRes, smkRes] = await Promise.all([
+          fetch(publicApiUrl('/api/sensors/temperature/readings?limit=50'), {
+            cache: 'no-store',
+          }),
+          fetch(publicApiUrl('/api/sensors/humidity/readings?limit=50'), {
+            cache: 'no-store',
+          }),
+          fetch(publicApiUrl('/api/sensors/pressure/readings?limit=50'), {
+            cache: 'no-store',
+          }),
+          fetch(publicApiUrl('/api/sensors/airflow/readings?limit=50'), {
+            cache: 'no-store',
+          }),
+          fetch(publicApiUrl('/api/sensors/smoke/readings?limit=50'), {
+            cache: 'no-store',
+          }),
+        ]);
+      } catch {
+        if (cancelled) return;
+        if (mode === 'lambda') {
+          setBackendTemps(latestDemoValues('temperature', TOTAL_SENSORS));
+          setBackendHumidity(latestDemoValues('humidity', TOTAL_SENSORS));
+          setBackendPressure(latestDemoValues('pressure', TOTAL_SENSORS));
+          setBackendAirflow(latestDemoValues('airflow', TOTAL_SENSORS));
+          setBackendSmoke(latestDemoValues('smoke', TOTAL_SENSORS));
+          setHasData(true);
+        }
+        return;
+      }
       if (cancelled) return;
       let temps: number[] = [];
       let humidity: number[] = [];
@@ -177,7 +194,7 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
           gotReal = true;
         }
       }
-      // Demo values only in Lambda mode — Local must stay empty/zeros when the PC API is down.
+      // Demo values only when using hosted Lambda API and readings are empty (no fake “live” data on local PC).
       if (mode === 'lambda') {
         if (temps.length === 0) temps = latestDemoValues('temperature', TOTAL_SENSORS);
         if (humidity.length === 0) humidity = latestDemoValues('humidity', TOTAL_SENSORS);

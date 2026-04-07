@@ -77,3 +77,28 @@ export function validateBody(body: unknown): { readings: SensorReading[] } | nul
   }
   return readings.length > 0 ? { readings } : null;
 }
+
+/**
+ * MQTT payload shapes from edge:
+ * - single `SensorReading` JSON object
+ * - `{ "readings": [ ... ] }` (AWS IoT tutorial / batch)
+ * - JSON array of readings
+ */
+export function parseReadingsFromMqttPayload(payloadUtf8: string): SensorReading[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payloadUtf8);
+  } catch {
+    return null;
+  }
+  if (Array.isArray(parsed)) {
+    const v = validateBody({ readings: parsed });
+    return v?.readings ?? null;
+  }
+  if (typeof parsed === 'object' && parsed !== null && 'readings' in parsed) {
+    const v = validateBody(parsed);
+    return v?.readings ?? null;
+  }
+  const one = validateReading(parsed);
+  return one ? [one] : null;
+}

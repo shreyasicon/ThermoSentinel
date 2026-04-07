@@ -104,7 +104,7 @@ Redeploy the frontend after saving variables (Amplify rebuilds with the new `NEX
 
 ### 3c. Behaviour on Amplify
 
-- With **`NEXT_PUBLIC_LAMBDA_API_URL`** set at build time, the dashboard **defaults to “AWS Lambda”** on `*.amplifyapp.com` so charts call **API Gateway + Lambda + DynamoDB** without extra clicks.
+- With **`NEXT_PUBLIC_LAMBDA_API_URL`** set at build time, the dashboard **defaults to “AWS Lambda”** on the first paint (including static export) so fetches go to **API Gateway**, not `http://127.0.0.1:3000` in the visitor’s browser.
 - **Local API** still works for developers who run `npm run dev` and open the Amplify URL with **Local API** selected; set **`ALLOWED_API_ORIGINS`** on the local Next server for CORS (see `.env.example`).
 
 ### 3d. Build
@@ -139,5 +139,5 @@ For **Amplify** hosting only, connect the repo and set **`NEXT_PUBLIC_LAMBDA_API
 ## 6. Troubleshooting
 
 - **CORS errors:** The SAM template enables broad CORS on the HTTP API. If you lock origins down later, add your `*.amplifyapp.com` (and custom domain) to `AllowOrigins`.
-- **Dashboard loads but no data:** Confirm **`NEXT_PUBLIC_LAMBDA_API_URL`** was set **before** the Amplify build (redeploy after editing env vars). Check Lambda has **`DYNAMODB_READINGS_TABLE`** and ingested data. For **Local API**, run `npm run dev` and set **`ALLOWED_API_ORIGINS`** for your Amplify URL.
+- **Dashboard loads but no data:** Confirm **`NEXT_PUBLIC_LAMBDA_API_URL`** was set **before** the Amplify build (redeploy after editing env vars). In the browser, open DevTools → Network and confirm requests go to **`execute-api…amazonaws.com`**, not `127.0.0.1`. Check Lambda has **`DYNAMODB_READINGS_TABLE`** and that something is **POSTing to `/api/ingest`** (fog/simulator or a test); otherwise readings stay empty and you only see demo fill. For **Local API**, run `npm run dev` and set **`ALLOWED_API_ORIGINS`** for your Amplify URL.
 - **Amplify build fails:** If a dependency (e.g. analytics) conflicts with `output: 'export'`, check the Amplify build log; you may need to adjust `app/layout.tsx` for static hosting.

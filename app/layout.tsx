@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Providers } from '@/components/Providers'
 import './globals.css'
@@ -28,15 +29,20 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  // `headers()` is not available for fully static export (`STATIC_EXPORT` / Amplify `out/`).
+  const requestHost =
+    process.env.STATIC_EXPORT === 'true'
+      ? null
+      : (await headers()).get('host')
   return (
     <html lang="en" className="dark">
       <body className="font-sans antialiased">
-        <Providers>{children}</Providers>
+        <Providers requestHost={requestHost}>{children}</Providers>
       </body>
     </html>
   )

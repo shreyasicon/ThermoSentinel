@@ -1,10 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: ThermoSentinel API — API Gateway HTTP API + Lambda (ingest + sensor readings)
+Description: ThermoSentinel API — HTTP API + Lambda + SQS ingest + optional SNS ops topic
 
 Globals:
   Function:
-    Timeout: 29
+    Timeout: 60
     MemorySize: 512
     Runtime: nodejs20.x
     Architectures:
@@ -24,6 +24,18 @@ Parameters:
     Type: String
     Default: ''
     Description: Optional REDIS_URL (reserved for future queue-based ingest)
+  FogSenderPrincipalArn:
+    Type: String
+    Default: ''
+    Description: Optional IAM principal ARN for sqs:SendMessage queue resource policy
+  OpsAlertEmail:
+    Type: String
+    Default: ''
+    Description: Email for SNS CRITICAL alerts (confirm subscription after deploy)
+
+Conditions:
+  HasFogSenderPrincipal: !Not [!Equals [!Ref FogSenderPrincipalArn, '']]
+  HasOpsAlertEmail: !Not [!Equals [!Ref OpsAlertEmail, '']]
 
 Resources:
   ThermoHttpApi:
@@ -40,16 +52,89 @@ Resources:
           - '*'
         MaxAge: 86400
 
+  # Fog can send the same JSON as POST /api/ingest; Lambda drains the queue.
+  IngestDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-ingest-dlq'
+      MessageRetentionPeriod: 1209600
+
+  IngestQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub '${AWS::StackName}-ingest'
+      VisibilityTimeout: 120
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt IngestDLQ.Arn
+        maxReceiveCount: 5
+
+  IngestQueueSenderPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Condition: HasFogSenderPrincipal
+    Properties:
+      Queues:
+        - !Ref IngestQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowFogSenderSendMessage
+            Effect: Allow
+            Principal:
+              AWS: !Ref FogSenderPrincipalArn
+            Action: sqs:SendMessage
+            Resource: !GetAtt IngestQueue.Arn
+
+  # Optional: subscribe email/SMS in console for ops (alarms, scripts).
+  OpsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${AWS::StackName}-ops'
+      DisplayName: ThermoSentinel ops
+
+  OpsAlertEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasOpsAlertEmail
+    Properties:
+      Protocol: email
+      Endpoint: !Ref OpsAlertEmail
+      TopicArn: !Ref OpsTopic
+
+  ThermoReadingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-readings'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: sensorType
+          AttributeType: S
+        - AttributeName: readingKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: sensorType
+          KeyType: HASH
+        - AttributeName: readingKey
+          KeyType: RANGE
+
   ThermoApiFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: handler.handler
       CodeUri: ../../dist/lambda/
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThermoReadingsTable
       Environment:
         Variables:
           TURSO_DATABASE_URL: !Ref TursoDatabaseUrl
           TURSO_AUTH_TOKEN: !Ref TursoAuthToken
           REDIS_URL: !Ref RedisUrl
+          DYNAMODB_READINGS_TABLE: !Ref ThermoReadingsTable
+          INGEST_QUEUE_URL: !Ref IngestQueue
+          SNS_OPS_TOPIC_ARN: !Ref OpsTopic
+          CRITICAL_TEMP_CELSIUS: '35'
+          CRITICAL_SMOKE_INDEX: '70'
+          CRITICAL_HUMIDITY_HIGH: '90'
+          CRITICAL_HUMIDITY_LOW: '10'
       Events:
         Health:
           Type: HttpApi
@@ -69,6 +154,14 @@ Resources:
             ApiId: !Ref ThermoHttpApi
             Path: /api/sensors/{type}/readings
             Method: GET
+        SqsIngest:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt IngestQueue.Arn
+            BatchSize: 10
+            MaximumBatchingWindowInSeconds: 5
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
 
 Outputs:
   HttpApiUrl:
@@ -78,5 +171,20 @@ Outputs:
     Description: HTTP API ID
     Value: !Ref ThermoHttpApi
   FogIngestUrl:
-    Description: Full URL for fog CLOUD_URL / ingest
+    Description: Direct HTTP ingest (same as before)
     Value: !Sub 'https://${ThermoHttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}/api/ingest'
+  IngestQueueUrl:
+    Description: Set FOG_SQS_QUEUE_URL on fog node to this URL (same JSON body as HTTP ingest)
+    Value: !Ref IngestQueue
+  IngestQueueArn:
+    Description: Queue ARN (IAM policies)
+    Value: !GetAtt IngestQueue.Arn
+  IngestDLQUrl:
+    Description: Dead-letter queue — inspect failed messages
+    Value: !Ref IngestDLQ
+  OpsTopicArn:
+    Description: Optional SNS topic for notifications / alarms
+    Value: !Ref OpsTopic
+  ReadingsTableName:
+    Description: DynamoDB readings table
+    Value: !Ref ThermoReadingsTable

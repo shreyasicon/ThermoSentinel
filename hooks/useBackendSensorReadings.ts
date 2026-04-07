@@ -15,7 +15,7 @@ export interface BackendReading {
 }
 
 export function useBackendSensorReadings(type: SensorType, limit = 50) {
-  const { publicApiUrl, mode } = useApiBackend();
+  const { publicApiUrl } = useApiBackend();
   const [readings, setReadings] = useState<BackendReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,28 +37,19 @@ export function useBackendSensorReadings(type: SensorType, limit = 50) {
         setReadings(fetched);
         setError(null);
         setIsDemo(false);
-      } else if (mode === 'lambda') {
+      } else {
         setReadings(generateDemoReadings(type, limit));
         setError(null);
         setIsDemo(true);
-      } else {
-        setReadings([]);
-        setError(null);
-        setIsDemo(false);
       }
     } catch (e) {
       setError(null);
-      if (mode === 'lambda') {
-        setReadings(generateDemoReadings(type, limit));
-        setIsDemo(true);
-      } else {
-        setReadings([]);
-        setIsDemo(false);
-      }
+      setReadings(generateDemoReadings(type, limit));
+      setIsDemo(true);
     } finally {
       setLoading(false);
     }
-  }, [type, limit, publicApiUrl, mode]);
+  }, [type, limit, publicApiUrl]);
 
   useEffect(() => {
     setLoading(true);

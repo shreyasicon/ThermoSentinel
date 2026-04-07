@@ -9,10 +9,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { buildPublicApiUrl, resolveApiBaseForMode, type ApiBackendMode } from '@/lib/public-api-base';
-
-/** Bumped so hosted users get default Local without an old "lambda" preference. */
-const STORAGE_KEY = 'thermosentinel-api-backend-v2';
+import {
+  API_BACKEND_STORAGE_KEY,
+  buildPublicApiUrl,
+  isHostedAmplifyHostname,
+  readInitialApiMode,
+  resolveApiBaseForMode,
+  type ApiBackendMode,
+} from '@/lib/public-api-base';
 
 export type ApiBackendContextValue = {
   mode: ApiBackendMode;
@@ -23,41 +27,49 @@ export type ApiBackendContextValue = {
 
 const ApiBackendContext = createContext<ApiBackendContextValue | null>(null);
 
-export function ApiBackendProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeState] = useState<ApiBackendMode>('local');
+export function ApiBackendProvider({
+  children,
+  requestHost,
+}: {
+  children: ReactNode;
+  /** From server `headers().get('host')` — keeps local API label in sync during SSR/hydration */
+  requestHost?: string | null;
+}) {
+  const [mode, setModeState] = useState<ApiBackendMode>(() =>
+    readInitialApiMode(requestHost),
+  );
 
+  /** Re-sync persisted choice after mount (SSR could not read localStorage). */
   useEffect(() => {
     try {
-      const s = localStorage.getItem(STORAGE_KEY);
-      if (s === 'lambda' || s === 'local') {
-        setModeState(s);
+      // Same as readInitialApiMode: in dev, don't re-apply `lambda` unless we're on hosted Amplify.
+      if (
+        process.env.NODE_ENV === 'development' &&
+        typeof window !== 'undefined' &&
+        !isHostedAmplifyHostname(window.location.hostname)
+      ) {
         return;
       }
+      const s = localStorage.getItem(API_BACKEND_STORAGE_KEY);
+      if (s === 'lambda' || s === 'local') setModeState(s);
     } catch {
       /* ignore */
-    }
-    // Hosted UI (e.g. Amplify): default to Lambda when the API URL was baked in at build time.
-    const baked =
-      typeof process !== 'undefined' &&
-      (process.env.NEXT_PUBLIC_LAMBDA_API_URL || process.env.NEXT_PUBLIC_API_URL);
-    if (baked && typeof window !== 'undefined') {
-      const h = window.location.hostname;
-      if (h.includes('amplifyapp.com') || h.endsWith('.amplifyaws.com')) {
-        setModeState('lambda');
-      }
     }
   }, []);
 
   const setMode = useCallback((m: ApiBackendMode) => {
     setModeState(m);
     try {
-      localStorage.setItem(STORAGE_KEY, m);
+      localStorage.setItem(API_BACKEND_STORAGE_KEY, m);
     } catch {
       /* ignore */
     }
   }, []);
 
-  const apiBase = useMemo(() => resolveApiBaseForMode(mode), [mode]);
+  const apiBase = useMemo(
+    () => resolveApiBaseForMode(mode, requestHost),
+    [mode, requestHost],
+  );
 
   const publicApiUrl = useCallback(
     (path: string) => buildPublicApiUrl(path, apiBase),
