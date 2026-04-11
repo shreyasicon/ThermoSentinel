@@ -85,9 +85,11 @@ export function validateBody(body: unknown): { readings: SensorReading[] } | nul
  * - JSON array of readings
  */
 export function parseReadingsFromMqttPayload(payloadUtf8: string): SensorReading[] | null {
+  const raw = payloadUtf8.replace(/^\uFEFF/, '').trim();
+  if (!raw) return null;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(payloadUtf8);
+    parsed = JSON.parse(raw);
   } catch {
     return null;
   }

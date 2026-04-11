@@ -31,6 +31,9 @@ export async function POST(request: NextRequest) {
   }
 
   await pushIngest(envelope);
+  if (process.env.NODE_ENV === 'development' && envelope.readings.length > 0) {
+    console.log(`[ingest] stored ${envelope.readings.length} reading(s) for dashboard API`);
+  }
   return NextResponse.json(
     { accepted: envelope.readings.length, queued: true },
     { status: 202, headers: { 'Cache-Control': 'no-store' } }

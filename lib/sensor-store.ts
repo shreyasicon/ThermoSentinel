@@ -1,8 +1,3 @@
-/**
- * Sensor readings store for cloud backend.
- * Priority: DynamoDB (DYNAMODB_READINGS_TABLE) → Turso → in-memory.
- */
-
 import {
   dynamoAddReadings,
   dynamoGetReadings,

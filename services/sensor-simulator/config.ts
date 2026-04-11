@@ -22,13 +22,14 @@ function envStr(key: string, defaultVal: string): string {
   return process.env[key] ?? defaultVal;
 }
 
-/** Default config for each sensor type (frequency & dispatch in ms) */
+/** Default config for each sensor type (frequency & dispatch in ms). Temperature/humidity default to 15 to match 3 racks × 5 servers in the UI. */
 export const DEFAULT_SENSOR_CONFIG: SensorTypeConfig[] = [
-  { sensorType: 'temperature', sampleFrequencyMs: 5_000, dispatchIntervalMs: 15_000, sensorCount: 3 },
-  { sensorType: 'humidity', sampleFrequencyMs: 30_000, dispatchIntervalMs: 60_000, sensorCount: 2 },
-  { sensorType: 'pressure', sampleFrequencyMs: 30_000, dispatchIntervalMs: 60_000, sensorCount: 2 },
-  { sensorType: 'airflow', sampleFrequencyMs: 30_000, dispatchIntervalMs: 45_000, sensorCount: 2 },
-  { sensorType: 'smoke', sampleFrequencyMs: 5_000, dispatchIntervalMs: 10_000, sensorCount: 2 },
+  { sensorType: 'temperature', sampleFrequencyMs: 5_000, dispatchIntervalMs: 15_000, sensorCount: 15 },
+  /** Same dispatch window as temperature so the dashboard gets temp + humidity together (avoids long gaps where one series is empty). */
+  { sensorType: 'humidity', sampleFrequencyMs: 10_000, dispatchIntervalMs: 15_000, sensorCount: 15 },
+  { sensorType: 'pressure', sampleFrequencyMs: 30_000, dispatchIntervalMs: 60_000, sensorCount: 15 },
+  { sensorType: 'airflow', sampleFrequencyMs: 30_000, dispatchIntervalMs: 45_000, sensorCount: 15 },
+  { sensorType: 'smoke', sampleFrequencyMs: 5_000, dispatchIntervalMs: 10_000, sensorCount: 15 },
 ];
 
 /** Fog node URL to POST readings (sensor layer sends raw readings; fog batches if needed) */

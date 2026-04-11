@@ -6,7 +6,10 @@
 
 import '../../lib/load-env.js';
 import { connect } from 'mqtt';
-import { extraMqttTlsOptions } from '../../lib/mqtt-connect-options.js';
+import mqttConnect from '../../lib/mqtt-connect-options.js';
+
+/** Nested `package.json` + tsx loads root `lib` as CJS interop — real exports sit on `default`. */
+const { applyMqttTlsProfile, extraMqttTlsOptions } = mqttConnect;
 import {
   getEffectiveConfig,
   FOG_URL,
@@ -32,8 +35,6 @@ let mqttClient: ReturnType<typeof connect> | null = null;
 let lastFogUnreachableLog = 0;
 const FOG_UNREACHABLE_LOG_INTERVAL_MS = 30_000;
 let mqttDisconnected = false;
-let lastMqttUnavailableLog = 0;
-const MQTT_UNAVAILABLE_LOG_INTERVAL_MS = 300_000;
 
 async function sendToFog(readings: SensorReading[]): Promise<void> {
   if (readings.length === 0) return;
@@ -79,18 +80,11 @@ function topicForReading(r: SensorReading): string {
   return `${MQTT_TOPIC_ROOT}/${normalizeRoom(r.location)}/${r.sensorType}`;
 }
 
-async function publishToMqtt(readings: SensorReading[]): Promise<void> {
-  if (!mqttClient || !mqttClient.connected) {
-    mqttDisconnected = true;
-    const now = Date.now();
-    if (now - lastMqttUnavailableLog >= MQTT_UNAVAILABLE_LOG_INTERVAL_MS) {
-      lastMqttUnavailableLog = now;
-      console.error(
-        `MQTT client not connected to ${MQTT_BROKER_URL}. Start a broker on that URL or run \"npm run simulator:http\".`
-      );
-    }
-    return;
-  }
+/** Batches dispatched before TLS connect — were previously dropped. */
+const pendingMqttBatches: SensorReading[][] = [];
+
+async function publishMqttConnected(readings: SensorReading[]): Promise<void> {
+  if (!mqttClient?.connected) return;
   if (MQTT_TOPIC_MODE === 'iot') {
     const payload = JSON.stringify({ readings });
     await new Promise<void>((resolve, reject) => {
@@ -113,8 +107,48 @@ async function publishToMqtt(readings: SensorReading[]): Promise<void> {
   }
 }
 
+function flushPendingMqttBatches(): void {
+  if (!mqttClient?.connected || pendingMqttBatches.length === 0) return;
+  const n = pendingMqttBatches.length;
+  console.log(`[simulator] Flushing ${n} MQTT batch(es) queued before connect…`);
+  const batches = pendingMqttBatches.splice(0, pendingMqttBatches.length);
+  for (const batch of batches) {
+    void publishMqttConnected(batch).catch((err) =>
+      console.error('[simulator] Queued MQTT publish failed:', err instanceof Error ? err.message : err),
+    );
+  }
+}
+
+async function publishToMqtt(readings: SensorReading[]): Promise<void> {
+  if (!mqttClient) {
+    console.error('[simulator] MQTT client not initialized');
+    return;
+  }
+  if (!mqttClient.connected) {
+    mqttDisconnected = true;
+    pendingMqttBatches.push(readings);
+    if (pendingMqttBatches.length === 1) {
+      console.log(
+        `[simulator] MQTT not connected yet — queueing batch (${readings.length} readings); will publish after TLS connect.`,
+      );
+    }
+    return;
+  }
+  await publishMqttConnected(readings);
+}
+
 function initMqttPublisher() {
+  applyMqttTlsProfile('EDGE');
   const tls = extraMqttTlsOptions();
+  if (MQTT_BROKER_URL.startsWith('mqtts') && (!tls?.cert || !tls?.key)) {
+    console.error(
+      '[simulator] mqtts:// (AWS IoT Core) requires mutual TLS. Set all of:\n' +
+        '  AWS_IOT_CA_PATH, AWS_IOT_CERT_PATH, AWS_IOT_KEY_PATH\n' +
+        '  — or EDGE_AWS_IOT_CA_PATH, EDGE_AWS_IOT_CERT_PATH, EDGE_AWS_IOT_KEY_PATH\n' +
+        '  (or MQTT_* aliases). See docs/AWS_IOT_CORE.md.',
+    );
+    process.exit(1);
+  }
   const clientId =
     process.env.SIMULATOR_MQTT_CLIENT_ID ||
     process.env.MQTT_CLIENT_ID ||
@@ -130,12 +164,14 @@ function initMqttPublisher() {
       mqttDisconnected = false;
     }
     console.log(`Simulator MQTT connected: ${MQTT_BROKER_URL}`);
+    flushPendingMqttBatches();
   });
   mqttClient.on('reconnect', () => {
     mqttDisconnected = true;
   });
-  mqttClient.on('error', () => {
+  mqttClient.on('error', (err) => {
     mqttDisconnected = true;
+    console.error('[simulator] MQTT error:', err instanceof Error ? err.message : err);
   });
 }
 

@@ -69,7 +69,7 @@ export default function Dashboard() {
   const activeSimulations = (Object.entries(simulations) as [SimulationKey, boolean][]).filter(
     ([, v]) => v
   );
-  const { racks, metrics, hasData } = useSensorData();
+  const { racks, metrics, hasData, hasTemperatureReadings } = useSensorData();
 
   return (
     <div className="min-h-screen bg-background">
@@ -136,7 +136,7 @@ export default function Dashboard() {
         <BackendAveragesCards />
 
         {/* Metrics Dashboard */}
-        <SystemMetricsDisplay metrics={metrics} />
+        <SystemMetricsDisplay metrics={metrics} hasLiveData={hasTemperatureReadings} />
 
         {/* Racks Monitoring — live from fog pipeline */}
         <div className="space-y-6">

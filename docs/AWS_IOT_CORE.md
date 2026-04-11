@@ -15,6 +15,23 @@ ThermoSentinel adds a **fog subscriber** (second Thing + policy) that listens on
 
 ---
 
+## IoT Things vs “five sensors” (important)
+
+- **Thing** = one **identity in AWS IoT** used for **MQTT connect** (TLS client certificate + **client ID**). It is **not** one Thing per temperature/humidity/pressure/airflow/smoke row.
+- This project has **five sensor *types*** in software; they are carried **inside the JSON payload** as `readings: [ { sensorId, sensorType, value, … }, … ]` on **one topic** (e.g. `sensors/mock-sensor-001/data`).
+- **Typical setup:** **one Thing** for the publisher (e.g. `mock-sensor-001`) and **one Thing** for the fog subscriber (e.g. `thermosentinel-fog`) — **two MQTT clients**, not five.
+- You only create **more Things** if you add **more physical devices** (or more distinct MQTT clients), not because you have five metric types.
+
+---
+
+## This repo already uses **AWS IoT Core MQTT** (`mqtts://…:8883`)
+
+- The dependency **`mqtt`** (MQTT.js) connects to your account’s **device data endpoint** with **mutual TLS** (Amazon Root CA + device cert + private key). That **is** the IoT Core MQTT protocol on port **8883** — the same path AWS documents for custom clients.
+- **`aws-iot-device-sdk-v2`** is an **optional** AWS wrapper (often used for Greengrass, fleet provisioning, etc.). It still speaks MQTT to IoT Core; it does **not** replace the MQTT broker feature — it’s another client library. Adding it here would **duplicate** `mqtt` without changing what the cloud sees.
+- **HTTP `GET`** in this app is used for **REST** (Next.js `/api/...`, fog `/status`), **not** for IoT telemetry. In **MQTT mode**, the simulator and fog use **`mqtt.publish` / subscribe** to IoT Core, not GET.
+
+---
+
 ## Reference policy: `SensorPublishPolicy` (sensor / edge only)
 
 Replace `REGION`, `ACCOUNT`, and thing name if needed. This matches the classic lab shape: one client id, one data topic, subscribe under the same prefix.

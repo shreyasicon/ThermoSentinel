@@ -69,3 +69,19 @@ Set **`MQTT_TOPIC_MODE=library`**, **`MQTT_TOPIC_ROOT=library/sensors`**, and po
 ### ngrok (or similar) to `localhost:3000`
 
 If the dashboard is opened at **`https://your-subdomain.ngrok-free.dev`**, the app treats that like localhost and uses **same-origin** `/api/…`. Point the fog node at the public ingest URL, e.g. **`CLOUD_URL=https://your-subdomain.ngrok-free.dev/api/ingest`**. Set **`FOG_CORS_ORIGIN`** to the same `https://…` origin if the browser calls the fog HTTP API directly.
+
+---
+
+## Troubleshooting: no messages in the AWS IoT **MQTT test client**
+
+1. **`npm run dev` / `npm run dev:all` does not use IoT MQTT** — the default stack uses **HTTP** (simulator → fog → Next). Nothing is published to AWS IoT. Use **`npm run dev:iot`** and a repo-root **`.env`** with **`MQTT_BROKER_URL`**, **`AWS_IOT_*_PATH`**, **`SIMULATOR_MQTT_CLIENT_ID`**, **`FOG_MQTT_CLIENT_ID`**, topics (see `.env.example`).
+
+2. **Same AWS Region** — open **MQTT test client** in the **same region** as your endpoint (`…-ats.iot.**us-east-1**.amazonaws.com` → console top-right **us-east-1**).
+
+3. **Mutual TLS** — `mqtts://` requires **Amazon Root CA + device cert + private key** paths. If the simulator exits or logs TLS errors, fix paths (repo-root relative, e.g. `./certs/device.pem.crt`).
+
+4. **IoT policy** — the certificate must allow **`iot:Publish`** to **`…/topic/sensors/mock-sensor-001/data`** (or your `MQTT_DATA_TOPIC`) and **`iot:Connect`** for your **`SIMULATOR_MQTT_CLIENT_ID`**. If policy denies publish, the broker drops messages (check simulator terminal for errors).
+
+5. **Subscribe filter** — use **`sensors/#`** or the exact **`MQTT_DATA_TOPIC`** string your simulator prints at startup.
+
+6. **Lambda / API Gateway** — the **HTTP API + Lambda** stack does **not** show up in the IoT MQTT test client. That path is **REST**, not MQTT. You only see MQTT traffic when a **client publishes to IoT Core** (simulator, test client, or an IoT Rule target). To run logic on each message, add an **IoT Rule** → Lambda in the AWS console (separate from this repo’s default flow).

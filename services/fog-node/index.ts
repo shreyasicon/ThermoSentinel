@@ -20,7 +20,9 @@ import {
   FOG_SQS_QUEUE_URL,
   FOG_CORS_ORIGIN,
 } from './config.js';
-import { extraMqttTlsOptions } from '../../lib/mqtt-connect-options.js';
+import mqttConnect from '../../lib/mqtt-connect-options.js';
+
+const { applyMqttTlsProfile, extraMqttTlsOptions } = mqttConnect;
 import { parseSqsQueueMeta, sendEnvelopeToSqs } from './sqs-dispatch.js';
 import * as stats from './stats.js';
 import { validateBody, parseReadingsFromMqttPayload } from './validate.js';
@@ -44,6 +46,7 @@ function corsHeaders(): Record<string, string> {
 
 function initMqttPublisher(): void {
   if (!FOG_MQTT_PUBLISH) return;
+  applyMqttTlsProfile('FOG');
   const tls = extraMqttTlsOptions();
   const pubId =
     process.env.FOG_MQTT_PUBLISHER_CLIENT_ID ||
@@ -143,7 +146,15 @@ async function flushMqttBuffer(): Promise<void> {
 }
 
 function initMqttSubscriber() {
+  applyMqttTlsProfile('FOG');
   const tls = extraMqttTlsOptions();
+  if (MQTT_BROKER_URL.startsWith('mqtts') && (!tls?.cert || !tls?.key)) {
+    console.error(
+      '[fog] mqtts:// (AWS IoT Core) requires mutual TLS — set FOG_AWS_IOT_CA_PATH, FOG_AWS_IOT_CERT_PATH, FOG_AWS_IOT_KEY_PATH ' +
+        '(or unprefixed AWS_IOT_*). Subscriber not started. See docs/AWS_IOT_CORE.md',
+    );
+    return;
+  }
   const subId =
     process.env.FOG_MQTT_CLIENT_ID ||
     process.env.MQTT_CLIENT_ID ||
@@ -167,13 +178,24 @@ function initMqttSubscriber() {
     });
   });
 
-  client.on('message', (_topic, payload) => {
+  let lastInvalidMqttLog = 0;
+  client.on('message', (topic, payload) => {
     try {
-      const readings = parseReadingsFromMqttPayload(payload.toString());
-      if (!readings?.length) return;
+      const text = payload.toString();
+      const readings = parseReadingsFromMqttPayload(text);
+      if (!readings?.length) {
+        const now = Date.now();
+        if (now - lastInvalidMqttLog >= 15_000) {
+          lastInvalidMqttLog = now;
+          console.warn(
+            `[fog] MQTT message on ${topic} produced no valid readings (check JSON + ranges). Payload preview: ${text.slice(0, 160)}`,
+          );
+        }
+        return;
+      }
       for (const reading of readings) enqueueMqttReading(reading);
-    } catch {
-      // Ignore invalid payloads from broker
+    } catch (e) {
+      console.error('[fog] MQTT message handler error:', e instanceof Error ? e.message : e);
     }
   });
 

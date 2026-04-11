@@ -4,8 +4,9 @@
  */
 const PORT = Number(process.env.FOG_PORT) || 4000;
 const CLOUD_PORT = process.env.CLOUD_PORT || '3000';
+/** Prefer 127.0.0.1 over localhost so Node fetch matches Next’s listen address on Windows (IPv6 localhost mismatch). */
 const CLOUD_URL =
-  process.env.CLOUD_URL || `http://localhost:${CLOUD_PORT}/api/ingest`;
+  process.env.CLOUD_URL || `http://127.0.0.1:${CLOUD_PORT}/api/ingest`;
 const FOG_NODE_ID = process.env.FOG_NODE_ID || 'fog-node-1';
 /** Default `http` matches `npm run fog` (MQTT: `npm run fog:mqtt` or set `FOG_INPUT_MODE`). */
 const FOG_INPUT_MODE = (process.env.FOG_INPUT_MODE || 'http').toLowerCase(); // mqtt | http | both

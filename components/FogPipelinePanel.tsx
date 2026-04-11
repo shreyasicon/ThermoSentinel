@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Radio, Server, Cloud, ArrowRight, Activity } from 'lucide-react';
+import { useApiBackend } from '@/contexts/ApiBackendContext';
+import { buildPublicApiUrl, getLocalApiBase } from '@/lib/public-api-base';
 
 type FogStatusPayload = {
   service?: string;
@@ -33,18 +35,21 @@ function StatLine({ label, value }: { label: string; value: string | number | bo
 }
 
 export default function FogPipelinePanel() {
+  const { localApiTunnelUrl } = useApiBackend();
+  const fogStatusUrl = useMemo(() => {
+    const direct = process.env.NEXT_PUBLIC_FOG_STATUS_URL?.trim();
+    if (direct) return direct;
+    const base = getLocalApiBase(undefined, localApiTunnelUrl || null);
+    return buildPublicApiUrl('/api/fog/status', base);
+  }, [localApiTunnelUrl]);
+
   const [data, setData] = useState<FogStatusPayload | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const direct = process.env.NEXT_PUBLIC_FOG_STATUS_URL?.trim();
-      const localApi = (process.env.NEXT_PUBLIC_LOCAL_API_URL || '').replace(/\/$/, '');
-      const url =
-        direct ||
-        (localApi ? `${localApi}/api/fog/status` : '') ||
-        '/api/fog/status';
+      const url = fogStatusUrl;
       try {
         const res = await fetch(url, { cache: 'no-store' });
         const json = (await res.json()) as FogStatusPayload;
@@ -61,7 +66,7 @@ export default function FogPipelinePanel() {
       cancelled = true;
       clearInterval(id);
     };
-  }, []);
+  }, [fogStatusUrl]);
 
   return (
     <div className="border border-emerald-500/25 rounded-xl p-6 backdrop-blur-sm bg-gradient-to-br from-emerald-950/20 to-slate-950/40">

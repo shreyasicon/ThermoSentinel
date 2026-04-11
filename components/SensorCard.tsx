@@ -8,7 +8,8 @@ interface SensorCardProps {
 }
 
 export default function SensorCard({ sensor }: SensorCardProps) {
-  const { percentage, color } = getTemperatureGauge(sensor.temperature);
+  const t = sensor.temperature;
+  const { percentage, color } = getTemperatureGauge(t ?? 20);
 
   return (
     <div className={`border rounded-lg p-4 backdrop-blur-sm ${getStatusBadgeClass(sensor.status)}`}>
@@ -34,13 +35,17 @@ export default function SensorCard({ sensor }: SensorCardProps) {
         <div>
           <div className="flex justify-between text-sm mb-1">
             <span>Temperature</span>
-            <span className="font-semibold">{formatTemperatureCelsius(sensor.temperature)}°C</span>
+            <span className="font-semibold">
+              {t == null ? '—' : `${formatTemperatureCelsius(t)}°C`}
+            </span>
           </div>
           <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-300"
-              style={{ width: `${percentage}%`, backgroundColor: color }}
-            />
+            {t != null && (
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{ width: `${percentage}%`, backgroundColor: color }}
+              />
+            )}
           </div>
         </div>
 

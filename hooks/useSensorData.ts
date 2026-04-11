@@ -8,7 +8,8 @@ import { latestDemoValues } from '@/lib/demo-sensor-data';
 export interface Sensor {
   id: string;
   name: string;
-  temperature: number;
+  /** `null` when temperature series not loaded yet (do not treat as 0°C). */
+  temperature: number | null;
   humidity: number;
   status: 'normal' | 'warning' | 'critical';
   location: string;
@@ -59,19 +60,61 @@ const calculateRiskScore = (sensors: Sensor[]): number => {
   return Math.round((impacted / TOTAL_SENSORS) * 100);
 };
 
-/** Extract latest value per sensorId from backend readings; return array for indexing by slot */
+/** Numeric suffix on sensor ids (e.g. temp-7 → 7) so rack slot i aligns with sensor-i. */
+function sensorIndexOrder(sensorId: string): number {
+  const m = /-(\d+)$/.exec(sensorId);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
+/** Normalize odd API / DB shapes (snake_case, string numbers). */
+function readingSensorId(r: Record<string, unknown>, index: number): string {
+  const a = r.sensorId;
+  const b = r.sensor_id;
+  if (typeof a === 'string' && a.length > 0) return a;
+  if (typeof b === 'string' && b.length > 0) return b;
+  return `__row-${index}`;
+}
+
+function readingNumericValue(r: Record<string, unknown>): number | null {
+  const raw = r.value ?? r.Value;
+  if (raw === undefined || raw === null) return null;
+  const num = typeof raw === 'number' && Number.isFinite(raw) ? raw : Number(raw);
+  return Number.isFinite(num) ? num : null;
+}
+
+/**
+ * Extract latest value per sensorId from backend readings; return array for indexing by slot.
+ * Falls back to “any values in order” if ids/fields don’t match the strict shape (fixes missing temperature on some setups).
+ */
 function latestValuesFromReadings(
-  readings: Array<{ sensorId: string; value?: number; ts?: string }>,
+  readings: Array<{ sensorId?: string; value?: number; ts?: string } | Record<string, unknown>>,
   slotCount: number
 ): number[] {
   const byId = new Map<string, { value: number; ts: number }>();
-  for (const r of readings) {
-    if (r.value == null || typeof r.value !== 'number') continue;
-    const ts = r.ts ? new Date(r.ts).getTime() : 0;
-    const prev = byId.get(r.sensorId);
-    if (!prev || ts >= prev.ts) byId.set(r.sensorId, { value: r.value, ts });
+  const looseValues: number[] = [];
+
+  for (let i = 0; i < readings.length; i++) {
+    const r = readings[i] as Record<string, unknown>;
+    if (!r || typeof r !== 'object') continue;
+    const num = readingNumericValue(r);
+    if (num === null) continue;
+    looseValues.push(num);
+    const sid = readingSensorId(r, i);
+    const tsRaw = r.ts ?? r.timestamp;
+    const ts = tsRaw ? new Date(String(tsRaw)).getTime() : 0;
+    const prev = byId.get(sid);
+    if (!prev || ts >= prev.ts) byId.set(sid, { value: num, ts });
   }
-  const values = [...byId.values()].map((x) => x.value);
+
+  let values = [...byId.entries()]
+    .sort((a, b) => sensorIndexOrder(a[0]) - sensorIndexOrder(b[0]))
+    .map(([, x]) => x.value);
+
+  // No per-sensor map (e.g. missing sensorId) — cycle through all numeric samples we saw, newest-first order preserved in looseValues
+  if (values.length === 0 && looseValues.length > 0) {
+    values = looseValues;
+  }
+
   if (values.length === 0) return [];
   return Array.from({ length: slotCount }, (_, i) => values[i % values.length]);
 }
@@ -112,29 +155,18 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      let tempRes: Response;
-      let humRes: Response;
-      let prsRes: Response;
-      let airRes: Response;
-      let smkRes: Response;
+      const urls = [
+        publicApiUrl('/api/sensors/temperature/readings?limit=50'),
+        publicApiUrl('/api/sensors/humidity/readings?limit=50'),
+        publicApiUrl('/api/sensors/pressure/readings?limit=50'),
+        publicApiUrl('/api/sensors/airflow/readings?limit=50'),
+        publicApiUrl('/api/sensors/smoke/readings?limit=50'),
+      ] as const;
+      let settled: PromiseSettledResult<Response>[];
       try {
-        [tempRes, humRes, prsRes, airRes, smkRes] = await Promise.all([
-          fetch(publicApiUrl('/api/sensors/temperature/readings?limit=50'), {
-            cache: 'no-store',
-          }),
-          fetch(publicApiUrl('/api/sensors/humidity/readings?limit=50'), {
-            cache: 'no-store',
-          }),
-          fetch(publicApiUrl('/api/sensors/pressure/readings?limit=50'), {
-            cache: 'no-store',
-          }),
-          fetch(publicApiUrl('/api/sensors/airflow/readings?limit=50'), {
-            cache: 'no-store',
-          }),
-          fetch(publicApiUrl('/api/sensors/smoke/readings?limit=50'), {
-            cache: 'no-store',
-          }),
-        ]);
+        settled = await Promise.allSettled(
+          urls.map((u) => fetch(u, { cache: 'no-store' })),
+        );
       } catch {
         if (cancelled) return;
         if (mode === 'lambda') {
@@ -144,56 +176,48 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
           setBackendAirflow(latestDemoValues('airflow', TOTAL_SENSORS));
           setBackendSmoke(latestDemoValues('smoke', TOTAL_SENSORS));
           setHasData(true);
+        } else {
+          setBackendTemps([]);
+          setBackendHumidity([]);
+          setBackendPressure([]);
+          setBackendAirflow([]);
+          setBackendSmoke([]);
+          setHasData(false);
         }
         return;
       }
       if (cancelled) return;
-      let temps: number[] = [];
-      let humidity: number[] = [];
-      let pressure: number[] = [];
-      let airflow: number[] = [];
-      let smoke: number[] = [];
-      let gotReal = false;
-      if (tempRes.ok) {
-        const { readings } = await tempRes.json();
-        const t = latestValuesFromReadings(readings ?? [], TOTAL_SENSORS);
-        if (t.length > 0) {
-          temps = t;
-          gotReal = true;
+
+      const parseOk = async (
+        result: PromiseSettledResult<Response>,
+      ): Promise<{ readings: Record<string, unknown>[] }> => {
+        if (result.status !== 'fulfilled' || !result.value.ok) return { readings: [] };
+        try {
+          const data = (await result.value.json()) as { readings?: unknown };
+          const raw = data.readings;
+          if (!Array.isArray(raw)) return { readings: [] };
+          return {
+            readings: raw.filter((x): x is Record<string, unknown> => x !== null && typeof x === 'object'),
+          };
+        } catch {
+          return { readings: [] };
         }
-      }
-      if (humRes.ok) {
-        const { readings } = await humRes.json();
-        const h = latestValuesFromReadings(readings ?? [], TOTAL_SENSORS);
-        if (h.length > 0) {
-          humidity = h;
-          gotReal = true;
-        }
-      }
-      if (prsRes.ok) {
-        const { readings } = await prsRes.json();
-        const p = latestValuesFromReadings(readings ?? [], TOTAL_SENSORS);
-        if (p.length > 0) {
-          pressure = p;
-          gotReal = true;
-        }
-      }
-      if (airRes.ok) {
-        const { readings } = await airRes.json();
-        const a = latestValuesFromReadings(readings ?? [], TOTAL_SENSORS);
-        if (a.length > 0) {
-          airflow = a;
-          gotReal = true;
-        }
-      }
-      if (smkRes.ok) {
-        const { readings } = await smkRes.json();
-        const s = latestValuesFromReadings(readings ?? [], TOTAL_SENSORS);
-        if (s.length > 0) {
-          smoke = s;
-          gotReal = true;
-        }
-      }
+      };
+
+      const [tempJ, humJ, prsJ, airJ, smkJ] = await Promise.all([
+        parseOk(settled[0]),
+        parseOk(settled[1]),
+        parseOk(settled[2]),
+        parseOk(settled[3]),
+        parseOk(settled[4]),
+      ]);
+
+      let temps = latestValuesFromReadings(tempJ.readings, TOTAL_SENSORS);
+      let humidity = latestValuesFromReadings(humJ.readings, TOTAL_SENSORS);
+      let pressure = latestValuesFromReadings(prsJ.readings, TOTAL_SENSORS);
+      let airflow = latestValuesFromReadings(airJ.readings, TOTAL_SENSORS);
+      let smoke = latestValuesFromReadings(smkJ.readings, TOTAL_SENSORS);
+
       // Demo values only when using hosted Lambda API and readings are empty (no fake “live” data on local PC).
       if (mode === 'lambda') {
         if (temps.length === 0) temps = latestDemoValues('temperature', TOTAL_SENSORS);
@@ -207,7 +231,12 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
       setBackendPressure(pressure);
       setBackendAirflow(airflow);
       setBackendSmoke(smoke);
-      setHasData(gotReal || mode === 'lambda');
+      // Local: show racks whenever any series has points (same bar as top summary cards).
+      const hasRackData =
+        mode === 'lambda'
+          ? true
+          : [temps, humidity, pressure, airflow, smoke].some((a) => a.length > 0);
+      setHasData(hasRackData);
     };
     run();
     const interval = setInterval(run, 2000);
@@ -218,7 +247,12 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
   }, [publicApiUrl, mode]);
 
   useEffect(() => {
-    const hasBackend = backendTemps.length > 0 || backendHumidity.length > 0;
+    const hasBackend =
+      backendTemps.length > 0 ||
+      backendHumidity.length > 0 ||
+      backendPressure.length > 0 ||
+      backendAirflow.length > 0 ||
+      backendSmoke.length > 0;
 
     const buildRacks = (): RackData[] =>
       Array.from({ length: 3 }, (_, rackIdx) => {
@@ -233,7 +267,7 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
         rackSmokeIndex: sAvg != null ? roundSmokeIndex(sAvg) : null,
         sensors: Array.from({ length: 5 }, (_, sensorIdx) => {
           const slot = rackIdx * 5 + sensorIdx;
-          const temp =
+          const tempRaw =
             hasBackend && backendTemps.length > 0
               ? backendTemps[slot % backendTemps.length]
               : null;
@@ -241,15 +275,20 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
             hasBackend && backendHumidity.length > 0
               ? backendHumidity[slot % backendHumidity.length]
               : null;
-          const numTemp = typeof temp === 'number' ? roundTemperatureCelsius(temp) : 0;
+          const numTemp =
+            typeof tempRaw === 'number' ? roundTemperatureCelsius(tempRaw) : null;
           const numHum = typeof humidity === 'number' ? humidity : 0;
           const serverNum = rackIdx * 5 + sensorIdx + 1;
+          const status =
+            numTemp == null
+              ? getHumidityStatus(numHum)
+              : worseStatus(getStatus(numTemp), getHumidityStatus(numHum));
           return {
             id: `sensor-${rackIdx}-${sensorIdx}`,
             name: `Server ${serverNum}`,
             temperature: numTemp,
             humidity: numHum,
-            status: worseStatus(getStatus(numTemp), getHumidityStatus(numHum)),
+            status,
             location: `Row ${String.fromCharCode(65 + rackIdx)}, Position ${sensorIdx + 1}`,
           };
         }),
@@ -260,16 +299,20 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
   }, [backendTemps, backendHumidity, backendPressure, backendAirflow, backendSmoke]);
 
   const allSensors = racks.flatMap((rack) => rack.sensors);
+  /** Use pipeline arrays for °C — rack cells use 0 as placeholder when a series is missing, which skewed avg/max to 0.00°C. */
+  const hasTemperatureReadings = backendTemps.length > 0;
   const metrics: SystemMetrics = {
-    avgTemperature: roundTemperatureCelsius(
-      allSensors.reduce((sum, s) => sum + s.temperature, 0) / allSensors.length || 0,
-    ),
-    maxTemperature: roundTemperatureCelsius(
-      Math.max(...allSensors.map((s) => s.temperature), 0),
-    ),
+    avgTemperature: hasTemperatureReadings
+      ? roundTemperatureCelsius(
+          backendTemps.reduce((sum, t) => sum + t, 0) / backendTemps.length,
+        )
+      : 0,
+    maxTemperature: hasTemperatureReadings
+      ? roundTemperatureCelsius(Math.max(...backendTemps))
+      : 0,
     systemRiskScore: calculateRiskScore(allSensors),
     activeAlerts: allSensors.filter((s) => s.status !== 'normal').length,
   };
 
-  return { racks, metrics, hasData };
+  return { racks, metrics, hasData, hasTemperatureReadings };
 };

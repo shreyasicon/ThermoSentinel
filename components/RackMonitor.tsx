@@ -21,9 +21,11 @@ function formatRackMetric(
 export default function RackMonitor({ rack }: RackMonitorProps) {
   const criticalCount = rack.sensors.filter((s) => s.status === 'critical').length;
   const warningCount = rack.sensors.filter((s) => s.status === 'warning').length;
-  const avgTemp = formatTemperatureCelsius(
-    rack.sensors.reduce((sum, s) => sum + s.temperature, 0) / rack.sensors.length,
-  );
+  const tempVals = rack.sensors.map((s) => s.temperature).filter((x): x is number => x != null);
+  const avgTemp =
+    tempVals.length > 0
+      ? `${formatTemperatureCelsius(tempVals.reduce((a, b) => a + b, 0) / tempVals.length)}`
+      : '—';
 
   return (
     <div className="border border-white/10 rounded-xl p-6 backdrop-blur-sm hover:border-white/20 transition-colors">
@@ -42,7 +44,10 @@ export default function RackMonitor({ rack }: RackMonitorProps) {
             <div className="w-3 h-3 rounded-full bg-red-500"></div>
             <span>{criticalCount} Critical</span>
           </div>
-          <div className="ml-auto font-semibold text-cyan-400 tabular-nums">Avg temp: {avgTemp}°C</div>
+          <div className="ml-auto font-semibold text-cyan-400 tabular-nums">
+            Avg temp: {avgTemp}
+            {tempVals.length > 0 ? '°C' : ''}
+          </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/85 border-t border-white/10 pt-3">
           <div>

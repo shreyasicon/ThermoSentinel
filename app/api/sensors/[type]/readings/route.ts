@@ -2,7 +2,7 @@
  * Dashboard API: get readings by sensor type (App Router).
  * Same process as ingest so in-memory store is shared and live data is visible.
  */
-export const dynamic = 'auto';
+export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';

@@ -7,6 +7,8 @@
     "dev:next": "next dev",
     "dev:all": "npm run dev",
     "dev:all:http": "npm run dev",
+    "predev:iot": "tsx scripts/verify-iot-core.ts",
+    "iot:verify": "tsx scripts/verify-iot-core.ts",
     "dev:iot": "node scripts/free-dev-ports.mjs && concurrently -n app,fog,sim -c blue,magenta,green \"npm run dev:next\" \"npm run fog:mqtt\" \"npm run simulator:mqtt\"",
     "dev:pipeline": "npm run dev",
     "build": "next build",
@@ -31,7 +33,8 @@
     "deploy:all": "npm run deploy:api && npm run deploy:aws",
     "ship": "npm run build:all && npm run deploy:api && npm run deploy:aws",
     "iot:deploy": "aws cloudformation deploy --template-file infra/iot-core/template.yaml --stack-name thermosentinel-iot --no-fail-on-empty-changeset",
-    "iot:provision": "node scripts/iot-provision.mjs"
+    "iot:provision": "node scripts/iot-provision.mjs",
+    "iot:cert-id": "node scripts/iot-cert-id.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1024.0",
