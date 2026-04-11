@@ -6,12 +6,23 @@ import { latestDemoValues } from '@/lib/demo-sensor-data';
 import { isLocalApiMode, type ApiBackendMode } from '@/lib/public-api-base';
 import type { SensorType } from '@/shared/schema/types';
 
+function numericFromApiRow(r: unknown): number | null {
+  if (!r || typeof r !== 'object') return null;
+  const o = r as Record<string, unknown>;
+  const raw = o.value ?? o.Value;
+  if (raw === undefined || raw === null) return null;
+  const n = typeof raw === 'number' && Number.isFinite(raw) ? raw : Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
 function averageFromReadingsOrDemo(
-  readings: { value?: number }[],
+  readings: unknown[],
   type: SensorType,
   mode: ApiBackendMode,
 ): number | null {
-  const values = readings.map((r) => r.value).filter((v): v is number => typeof v === 'number');
+  const values = readings
+    .map((r) => numericFromApiRow(r))
+    .filter((v): v is number => v != null);
   if (values.length > 0) {
     return values.reduce((a, b) => a + b, 0) / values.length;
   }

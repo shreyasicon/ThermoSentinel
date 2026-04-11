@@ -7,8 +7,21 @@ import type { SensorReading, SensorType } from '../shared/schema/types';
 
 const MAX_READINGS_PER_TYPE = 1000;
 
-// --- In-memory fallback ---
-const byType = new Map<SensorType, SensorReading[]>();
+/**
+ * Next.js dev (Turbopack) can load multiple copies of this module — separate `Map` instances
+ * meant ingest wrote to store A while GET /api/sensors/* read store B (empty charts).
+ * Pin the in-memory store on `globalThis` so all bundles share one map.
+ */
+const g = globalThis as unknown as {
+  __thermoSentinelSensorByType?: Map<SensorType, SensorReading[]>;
+};
+
+function getByTypeMap(): Map<SensorType, SensorReading[]> {
+  if (!g.__thermoSentinelSensorByType) {
+    g.__thermoSentinelSensorByType = new Map();
+  }
+  return g.__thermoSentinelSensorByType;
+}
 
 function getKey(type: SensorType): SensorType {
   return type;
@@ -77,6 +90,7 @@ async function tursoAddReadings(readings: SensorReading[]): Promise<void> {
 }
 
 function memoryAddReadings(readings: SensorReading[]): void {
+  const byType = getByTypeMap();
   for (const r of readings) {
     const key = getKey(r.sensorType);
     let list = byType.get(key);
@@ -146,6 +160,7 @@ function memoryGetReadings(
   type: SensorType,
   options: { from?: string; to?: string; limit?: number } = {}
 ): SensorReading[] {
+  const byType = getByTypeMap();
   const list = byType.get(type) ?? [];
   let out = [...list].reverse();
   if (options.from) {
@@ -215,6 +230,7 @@ export async function getReadingsAsync(
 }
 
 export function getLatestByType(): Partial<Record<SensorType, SensorReading[]>> {
+  const byType = getByTypeMap();
   const result: Partial<Record<SensorType, SensorReading[]>> = {};
   for (const type of byType.keys()) {
     const list = byType.get(type) ?? [];
