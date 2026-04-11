@@ -8,10 +8,41 @@
  * Fog / MQTT paths are unchanged: point CLOUD_URL at your chosen ingest URL separately.
  */
 
-export type ApiBackendMode = 'local' | 'lambda';
+/** `local` = HTTP pipeline (`npm run dev`); `localMqtt` = same PC API + MQTT/IoT pipeline (`npm run dev:iot`) — same API base, different UX hint. */
+export type ApiBackendMode = 'local' | 'localMqtt' | 'lambda';
+
+export function isLocalApiMode(mode: ApiBackendMode): boolean {
+  return mode === 'local' || mode === 'localMqtt';
+}
 
 /** Must match `STORAGE_KEY` in `ApiBackendContext` (persisted user choice). */
 export const API_BACKEND_STORAGE_KEY = 'thermosentinel-api-backend-v2';
+
+/**
+ * Optional HTTPS base for "This PC (local API)" when the UI is on HTTPS (e.g. Amplify) and
+ * `http://127.0.0.1` is blocked. Set to your ngrok URL (e.g. `https://xxx.ngrok-free.dev`) — no trailing slash.
+ * Writable from the dashboard; overrides the default loopback when valid.
+ */
+export const LOCAL_API_URL_STORAGE_KEY = 'thermosentinel-local-api-url-https';
+
+function normalizeHttpsBase(raw: string): string {
+  return raw.replace(/\/$/, '').trim();
+}
+
+/** Returns the URL if it looks like a safe HTTPS API origin (no trailing slash). */
+export function parseValidHttpsLocalApiUrl(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const s = normalizeHttpsBase(raw);
+  if (!/^https:\/\//i.test(s)) return null;
+  try {
+    const u = new URL(s);
+    if (u.protocol !== 'https:') return null;
+    if (!u.hostname) return null;
+    return `${u.origin}`;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Initial data-source mode: avoids Amplify/static builds starting as `local` (which points
@@ -37,7 +68,7 @@ export function readInitialApiMode(requestHost?: string | null): ApiBackendMode 
   try {
     if (typeof window !== 'undefined') {
       const s = localStorage.getItem(API_BACKEND_STORAGE_KEY);
-      if (s === 'lambda' || s === 'local') return s;
+      if (s === 'lambda' || s === 'local' || s === 'localMqtt') return s;
     }
   } catch {
     /* ignore */
@@ -112,9 +143,15 @@ function isSameOriginLocalApiHost(hostname: string): boolean {
  * Base URL for the machine-hosted Next API (or tunnel).
  * @param requestHost — optional `Host` header from the server (e.g. from `headers().get('host')`) so SSR matches the browser on localhost.
  */
-export function getLocalApiBase(requestHost?: string | null): string {
-  const env = (process.env.NEXT_PUBLIC_LOCAL_API_URL || '').replace(/\/$/, '');
+export function getLocalApiBase(
+  requestHost?: string | null,
+  /** From `localStorage` (set in UI) — HTTPS ngrok tunnel to the machine running `npm run dev`. */
+  persistedHttpsTunnel?: string | null,
+): string {
+  const env = normalizeHttpsBase(process.env.NEXT_PUBLIC_LOCAL_API_URL || '');
   if (env) return env;
+  const fromUser = parseValidHttpsLocalApiUrl(persistedHttpsTunnel);
+  if (fromUser) return fromUser;
   if (typeof window !== 'undefined') {
     const { hostname } = window.location;
     if (isSameOriginLocalApiHost(hostname)) return '';
@@ -131,13 +168,15 @@ export function getLocalApiBase(requestHost?: string | null): string {
 export function resolveApiBaseForMode(
   mode: ApiBackendMode,
   requestHost?: string | null,
+  persistedHttpsTunnel?: string | null,
 ): string {
   if (mode === 'lambda') {
     const lambda = getLambdaApiBase();
     if (lambda) return lambda;
-    return getLocalApiBase(requestHost);
+    return getLocalApiBase(requestHost, persistedHttpsTunnel);
   }
-  return getLocalApiBase(requestHost);
+  // `local` and `localMqtt` both use the machine-hosted Next API (tunnel or loopback).
+  return getLocalApiBase(requestHost, persistedHttpsTunnel);
 }
 
 export function buildPublicApiUrl(path: string, base: string): string {

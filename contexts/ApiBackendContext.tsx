@@ -11,6 +11,7 @@ import {
 } from 'react';
 import {
   API_BACKEND_STORAGE_KEY,
+  LOCAL_API_URL_STORAGE_KEY,
   buildPublicApiUrl,
   isHostedAmplifyHostname,
   readInitialApiMode,
@@ -23,6 +24,9 @@ export type ApiBackendContextValue = {
   setMode: (m: ApiBackendMode) => void;
   apiBase: string;
   publicApiUrl: (path: string) => string;
+  /** HTTPS tunnel URL (ngrok) for local API when hosted UI is HTTPS; persisted in localStorage. */
+  localApiTunnelUrl: string;
+  setLocalApiTunnelUrl: (url: string) => void;
 };
 
 const ApiBackendContext = createContext<ApiBackendContextValue | null>(null);
@@ -39,6 +43,29 @@ export function ApiBackendProvider({
     readInitialApiMode(requestHost),
   );
 
+  const [localApiTunnelUrl, setLocalApiTunnelUrlState] = useState('');
+
+  /** Load saved HTTPS tunnel for local API (ngrok). */
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(LOCAL_API_URL_STORAGE_KEY);
+      if (v) setLocalApiTunnelUrlState(v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setLocalApiTunnelUrl = useCallback((url: string) => {
+    const trimmed = url.trim();
+    setLocalApiTunnelUrlState(trimmed);
+    try {
+      if (trimmed) localStorage.setItem(LOCAL_API_URL_STORAGE_KEY, trimmed);
+      else localStorage.removeItem(LOCAL_API_URL_STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   /** Re-sync persisted choice after mount (SSR could not read localStorage). */
   useEffect(() => {
     try {
@@ -51,7 +78,7 @@ export function ApiBackendProvider({
         return;
       }
       const s = localStorage.getItem(API_BACKEND_STORAGE_KEY);
-      if (s === 'lambda' || s === 'local') setModeState(s);
+      if (s === 'lambda' || s === 'local' || s === 'localMqtt') setModeState(s);
     } catch {
       /* ignore */
     }
@@ -67,8 +94,8 @@ export function ApiBackendProvider({
   }, []);
 
   const apiBase = useMemo(
-    () => resolveApiBaseForMode(mode, requestHost),
-    [mode, requestHost],
+    () => resolveApiBaseForMode(mode, requestHost, localApiTunnelUrl || null),
+    [mode, requestHost, localApiTunnelUrl],
   );
 
   const publicApiUrl = useCallback(
@@ -82,8 +109,10 @@ export function ApiBackendProvider({
       setMode,
       apiBase,
       publicApiUrl,
+      localApiTunnelUrl,
+      setLocalApiTunnelUrl,
     }),
-    [mode, setMode, apiBase, publicApiUrl],
+    [mode, setMode, apiBase, publicApiUrl, localApiTunnelUrl, setLocalApiTunnelUrl],
   );
 
   return <ApiBackendContext.Provider value={value}>{children}</ApiBackendContext.Provider>;

@@ -3,16 +3,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApiBackend } from '@/contexts/ApiBackendContext';
 import { latestDemoValues } from '@/lib/demo-sensor-data';
+import { isLocalApiMode, type ApiBackendMode } from '@/lib/public-api-base';
 import type { SensorType } from '@/shared/schema/types';
 
 function averageFromReadingsOrDemo(
   readings: { value?: number }[],
   type: SensorType,
+  mode: ApiBackendMode,
 ): number | null {
   const values = readings.map((r) => r.value).filter((v): v is number => typeof v === 'number');
   if (values.length > 0) {
     return values.reduce((a, b) => a + b, 0) / values.length;
   }
+  // Only synthesize demo averages when viewing the hosted Lambda API — not for “This PC”, or HTTPS→HTTP failures look “live”.
+  if (isLocalApiMode(mode)) return null;
   const demo = latestDemoValues(type, 50);
   return demo.reduce((a, b) => a + b, 0) / demo.length;
 }
@@ -25,7 +29,7 @@ type BackendAverages = {
 };
 
 export default function BackendAveragesCards() {
-  const { publicApiUrl } = useApiBackend();
+  const { publicApiUrl, mode } = useApiBackend();
   const [data, setData] = useState<BackendAverages>({
     avgPressure: null,
     avgHumidity: null,
@@ -35,36 +39,31 @@ export default function BackendAveragesCards() {
 
   const load = useCallback(async () => {
     const fetchReadings = async (type: string, limit: number) => {
-      const res = await fetch(publicApiUrl(`/api/sensors/${type}/readings?limit=${limit}`), {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
-      });
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.readings ?? [];
+      try {
+        const res = await fetch(publicApiUrl(`/api/sensors/${type}/readings?limit=${limit}`), {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.readings ?? [];
+      } catch {
+        return [];
+      }
     };
-    try {
-      const [pressureR, humidityR, airflowR, smokeR] = await Promise.all([
-        fetchReadings('pressure', 50),
-        fetchReadings('humidity', 50),
-        fetchReadings('airflow', 50),
-        fetchReadings('smoke', 50),
-      ]);
-      setData({
-        avgPressure: averageFromReadingsOrDemo(pressureR, 'pressure'),
-        avgHumidity: averageFromReadingsOrDemo(humidityR, 'humidity'),
-        avgAirflow: averageFromReadingsOrDemo(airflowR, 'airflow'),
-        avgSmoke: averageFromReadingsOrDemo(smokeR, 'smoke'),
-      });
-    } catch {
-      setData({
-        avgPressure: averageFromReadingsOrDemo([], 'pressure'),
-        avgHumidity: averageFromReadingsOrDemo([], 'humidity'),
-        avgAirflow: averageFromReadingsOrDemo([], 'airflow'),
-        avgSmoke: averageFromReadingsOrDemo([], 'smoke'),
-      });
-    }
-  }, [publicApiUrl]);
+    const [pressureR, humidityR, airflowR, smokeR] = await Promise.all([
+      fetchReadings('pressure', 50),
+      fetchReadings('humidity', 50),
+      fetchReadings('airflow', 50),
+      fetchReadings('smoke', 50),
+    ]);
+    setData({
+      avgPressure: averageFromReadingsOrDemo(pressureR, 'pressure', mode),
+      avgHumidity: averageFromReadingsOrDemo(humidityR, 'humidity', mode),
+      avgAirflow: averageFromReadingsOrDemo(airflowR, 'airflow', mode),
+      avgSmoke: averageFromReadingsOrDemo(smokeR, 'smoke', mode),
+    });
+  }, [publicApiUrl, mode]);
 
   useEffect(() => {
     load();
