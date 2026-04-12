@@ -28,7 +28,7 @@ export default function ArchitecturePage() {
             <ApiBackendToggle />
           </div>
           <h1 className="text-3xl font-bold text-white">System Architecture</h1>
-          <p className="text-sm text-white/60 mt-1">Understanding the Edge-Fog-Cloud Model</p>
+          <p className="text-sm text-white/60 mt-1">Understanding the Edge Fog Cloud Model</p>
         </div>
       </header>
 
@@ -41,9 +41,7 @@ export default function ArchitecturePage() {
         <p className="text-sm text-white/55 mt-6 max-w-3xl">
           Edge sensors publish JSON over MQTT; the fog layer can use <strong className="text-white/80">AWS IoT Core</strong> as the
           broker (e.g. Thing <code className="text-cyan-300/90">mock-sensor-001</code>, topic{' '}
-          <code className="text-cyan-300/90">sensors/mock-sensor-001/data</code>). See repo docs{' '}
-          <code className="text-white/70">docs/ARCHITECTURE_EDGE_FOG_IOT.md</code> and{' '}
-          <code className="text-white/70">docs/AWS_IOT_CORE.md</code>.
+          <code className="text-cyan-300/90">sensors/mock-sensor-001/data</code>)
         </p>
 
         {/* Status Distribution */}
@@ -54,14 +52,14 @@ export default function ArchitecturePage() {
           <div className="border border-white/10 rounded-2xl p-8 backdrop-blur-sm">
             <h3 className="text-xl font-bold text-white mb-4">Why Edge-Fog-Cloud?</h3>
             <p className="text-white/70 leading-relaxed mb-4">
-              The edge-fog-cloud architecture distributes computing resources across multiple layers, each optimized
-              for specific tasks. This approach reduces latency, improves resilience, and optimizes bandwidth usage.
+              The edge fog cloud architecture distributes computing resources across multiple layers, each optimized
+              for specific tasks. This approach reduces latency, improves resilience and optimizes bandwidth usage.
             </p>
             <ul className="space-y-3 text-sm text-white/70">
               <li className="flex gap-3">
                 <span className="text-cyan-400 font-bold">▸</span>
                 <span>
-                  <strong className="text-white">Edge:</strong> Closest to data source, handles real-time collection
+                  <strong className="text-white">Edge:</strong> Closest to data source, handles real time collection
                 </span>
               </li>
               <li className="flex gap-3">
@@ -73,7 +71,7 @@ export default function ArchitecturePage() {
               <li className="flex gap-3">
                 <span className="text-violet-400 font-bold">▸</span>
                 <span>
-                  <strong className="text-white">Cloud:</strong> Central storage, long-term analytics
+                  <strong className="text-white">Cloud:</strong> Central storage, long term analytics
                 </span>
               </li>
             </ul>
@@ -82,7 +80,7 @@ export default function ArchitecturePage() {
           <div className="border border-white/10 rounded-2xl p-8 backdrop-blur-sm">
             <h3 className="text-xl font-bold text-white mb-4">Real-World Applications</h3>
             <p className="text-white/70 leading-relaxed mb-4">
-              This architecture pattern is used in various industries where real-time monitoring and intelligent
+              This architecture pattern is used in various industries where real time monitoring and intelligent
               processing are critical.
             </p>
             <ul className="space-y-3 text-sm text-white/70">
@@ -96,7 +94,7 @@ export default function ArchitecturePage() {
               </li>
               <li className="flex gap-3">
                 <span className="text-violet-400 font-bold">▸</span>
-                <span>Smart cities managing traffic, utilities, and public services</span>
+                <span>Smart cities managing traffic, utilities and public services</span>
               </li>
             </ul>
           </div>
@@ -149,7 +147,7 @@ export default function ArchitecturePage() {
 
         {/* Footer */}
         <div className="mt-12 text-center text-white/60 text-sm">
-          <p>ThermoSentinel © 2024 - Advanced Cloud Monitoring System</p>
+          <p>ThermoSentinel © 2026 - Advanced Datacenter Monitoring System</p>
         </div>
       </main>
     </div>

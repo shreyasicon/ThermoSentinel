@@ -189,9 +189,9 @@ export default function Dashboard() {
           <div className="border border-white/10 rounded-xl p-6 backdrop-blur-sm flex flex-col h-full">
             <h3 className="font-semibold text-white mb-4">About ThermoSentinel</h3>
             <p className="text-sm text-white/70 leading-relaxed flex-1">
-              ThermoSentinel is a sophisticated cloud monitoring system that demonstrates edge-fog-cloud
-              architecture principles. The system continuously monitors temperature and humidity across distributed
-              sensors, calculates dynamic risk scores, and provides real-time alerts.
+              ThermoSentinel is a cloud datacenter monitoring system built on edge fog cloud
+              architecture principles. The system continuously monitors server racks across distributed
+              sensors, calculates dynamic risk scores and provides real time alerts.
             </p>
           </div>
 
@@ -200,11 +200,11 @@ export default function Dashboard() {
             <ul className="text-sm text-white/70 space-y-2 flex-1">
               <li className="flex items-center gap-2">
                 <span className="text-cyan-400">✓</span>
-                <span>Real-time sensor simulation with 2-3 second updates</span>
+                <span>Real time sensor simulation updates</span>
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-cyan-400">✓</span>
-                <span>Scenario simulations: AC failure, humidity spike, pressure drop, airflow loss, smoke/fire</span>
+                <span>Scenarios dealt with: AC failure, humidity spike, pressure drop, airflow loss, smoke/fire</span>
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-cyan-400">✓</span>
@@ -212,7 +212,7 @@ export default function Dashboard() {
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-cyan-400">✓</span>
-                <span>Multi-layer architecture visualization</span>
+                <span>Multi layer architecture visualization</span>
               </li>
             </ul>
           </div>

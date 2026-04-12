@@ -8,8 +8,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'ThermoSentinel - Cloud Monitoring System',
-  description: 'Real-time edge-fog-cloud monitoring system for temperature and environmental data with dynamic risk assessment',
+  title: 'ThermoSentinel - Datacenter Monitoring System',
+  description: 'Real time Edge Fog Cloud monitoring system for temperature and environmental data with dynamic risk assessment',
   icons: {
     icon: [
       {
