@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useApiBackend } from '@/contexts/ApiBackendContext';
+import { generateDemoReadings } from '@/lib/demo-sensor-data';
 import type { SensorType } from '@/shared/schema/types';
 
 export interface BackendReading {
@@ -37,14 +38,14 @@ export function useBackendSensorReadings(type: SensorType, limit = 50) {
         setError(null);
         setIsDemo(false);
       } else {
-        setReadings([]);
-        setError('No readings received from API');
-        setIsDemo(false);
+        setReadings(generateDemoReadings(type, limit));
+        setError(null);
+        setIsDemo(true);
       }
     } catch (e) {
-      setError('Failed to fetch readings from API');
-      setReadings([]);
-      setIsDemo(false);
+      setError(null);
+      setReadings(generateDemoReadings(type, limit));
+      setIsDemo(true);
     } finally {
       setLoading(false);
     }
