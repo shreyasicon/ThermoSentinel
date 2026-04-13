@@ -38,7 +38,7 @@ export function useBackendSensorReadings(type: SensorType, limit = 50) {
         setError(null);
         setIsDemo(false);
       } else {
-        if (mode === 'lambda') {
+        if (mode === 'lambda' || res.ok) {
           setReadings(generateDemoReadings(type, limit));
           setError(null);
           setIsDemo(true);

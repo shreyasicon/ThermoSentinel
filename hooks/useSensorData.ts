@@ -214,6 +214,8 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
         parseOk(settled[4]),
       ]);
 
+      const anyFetchOk = settled.some((r) => r.status === 'fulfilled' && r.value.ok);
+
       let temps = latestValuesFromReadings(tempJ.readings, TOTAL_SENSORS);
       let humidity = latestValuesFromReadings(humJ.readings, TOTAL_SENSORS);
       let pressure = latestValuesFromReadings(prsJ.readings, TOTAL_SENSORS);
@@ -222,6 +224,14 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
 
       if (mode === 'lambda') {
         // Lambda can display fallback samples when remote readings are empty.
+        if (temps.length === 0) temps = latestDemoValues('temperature', TOTAL_SENSORS);
+        if (humidity.length === 0) humidity = latestDemoValues('humidity', TOTAL_SENSORS);
+        if (pressure.length === 0) pressure = latestDemoValues('pressure', TOTAL_SENSORS);
+        if (airflow.length === 0) airflow = latestDemoValues('airflow', TOTAL_SENSORS);
+        if (smoke.length === 0) smoke = latestDemoValues('smoke', TOTAL_SENSORS);
+      } else if (anyFetchOk) {
+        // Local API / Local MQTT: only show fallback when local API is actually reachable.
+        // If nothing is running (all fetches fail), keep UI empty.
         if (temps.length === 0) temps = latestDemoValues('temperature', TOTAL_SENSORS);
         if (humidity.length === 0) humidity = latestDemoValues('humidity', TOTAL_SENSORS);
         if (pressure.length === 0) pressure = latestDemoValues('pressure', TOTAL_SENSORS);
