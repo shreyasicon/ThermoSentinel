@@ -169,13 +169,23 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
         );
       } catch {
         if (cancelled) return;
-        // Keep UI populated even when the selected backend is temporarily unreachable.
-        setBackendTemps(latestDemoValues('temperature', TOTAL_SENSORS));
-        setBackendHumidity(latestDemoValues('humidity', TOTAL_SENSORS));
-        setBackendPressure(latestDemoValues('pressure', TOTAL_SENSORS));
-        setBackendAirflow(latestDemoValues('airflow', TOTAL_SENSORS));
-        setBackendSmoke(latestDemoValues('smoke', TOTAL_SENSORS));
-        setHasData(true);
+        if (mode === 'lambda') {
+          // Lambda mode remains continuously populated even during transient API issues.
+          setBackendTemps(latestDemoValues('temperature', TOTAL_SENSORS));
+          setBackendHumidity(latestDemoValues('humidity', TOTAL_SENSORS));
+          setBackendPressure(latestDemoValues('pressure', TOTAL_SENSORS));
+          setBackendAirflow(latestDemoValues('airflow', TOTAL_SENSORS));
+          setBackendSmoke(latestDemoValues('smoke', TOTAL_SENSORS));
+          setHasData(true);
+        } else {
+          // Local API / Local MQTT should be empty when local services are not running.
+          setBackendTemps([]);
+          setBackendHumidity([]);
+          setBackendPressure([]);
+          setBackendAirflow([]);
+          setBackendSmoke([]);
+          setHasData(false);
+        }
         return;
       }
       if (cancelled) return;
@@ -210,12 +220,14 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
       let airflow = latestValuesFromReadings(airJ.readings, TOTAL_SENSORS);
       let smoke = latestValuesFromReadings(smkJ.readings, TOTAL_SENSORS);
 
-      // Always keep all cards/racks populated, even when backend returns empty arrays.
-      if (temps.length === 0) temps = latestDemoValues('temperature', TOTAL_SENSORS);
-      if (humidity.length === 0) humidity = latestDemoValues('humidity', TOTAL_SENSORS);
-      if (pressure.length === 0) pressure = latestDemoValues('pressure', TOTAL_SENSORS);
-      if (airflow.length === 0) airflow = latestDemoValues('airflow', TOTAL_SENSORS);
-      if (smoke.length === 0) smoke = latestDemoValues('smoke', TOTAL_SENSORS);
+      if (mode === 'lambda') {
+        // Lambda can display fallback samples when remote readings are empty.
+        if (temps.length === 0) temps = latestDemoValues('temperature', TOTAL_SENSORS);
+        if (humidity.length === 0) humidity = latestDemoValues('humidity', TOTAL_SENSORS);
+        if (pressure.length === 0) pressure = latestDemoValues('pressure', TOTAL_SENSORS);
+        if (airflow.length === 0) airflow = latestDemoValues('airflow', TOTAL_SENSORS);
+        if (smoke.length === 0) smoke = latestDemoValues('smoke', TOTAL_SENSORS);
+      }
 
       setBackendTemps(temps);
       setBackendHumidity(humidity);
