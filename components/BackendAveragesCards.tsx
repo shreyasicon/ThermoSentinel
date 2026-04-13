@@ -3,7 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApiBackend } from '@/contexts/ApiBackendContext';
 import { latestDemoValues } from '@/lib/demo-sensor-data';
-import { isLocalApiMode, type ApiBackendMode } from '@/lib/public-api-base';
+import {
+  getPublicApiFetchHeaders,
+  isLocalApiMode,
+  type ApiBackendMode,
+} from '@/lib/public-api-base';
 import type { SensorType } from '@/shared/schema/types';
 
 function numericFromApiRow(r: unknown): number | null {
@@ -53,9 +57,10 @@ export default function BackendAveragesCards() {
   const load = useCallback(async () => {
     const fetchReadings = async (type: string, limit: number) => {
       try {
-        const res = await fetch(publicApiUrl(`/api/sensors/${type}/readings?limit=${limit}`), {
+        const url = publicApiUrl(`/api/sensors/${type}/readings?limit=${limit}`);
+        const res = await fetch(url, {
           cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' },
+          headers: getPublicApiFetchHeaders(url),
         });
         if (!res.ok) return { readings: [], reachable: false };
         const data = await res.json();

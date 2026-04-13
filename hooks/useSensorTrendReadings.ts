@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApiBackend } from '@/contexts/ApiBackendContext';
 import { generateDemoReadings } from '@/lib/demo-sensor-data';
+import { getPublicApiFetchHeaders } from '@/lib/public-api-base';
 import type { SensorType } from '@/shared/schema/types';
 
 export type TrendPoint = {
@@ -43,9 +44,10 @@ export function useSensorTrendReadings(
 
   const fetchReadings = useCallback(async (): Promise<TrendPoint[]> => {
     try {
-      const res = await fetch(publicApiUrl(`/api/sensors/${type}/readings?limit=${limit}`), {
+      const url = publicApiUrl(`/api/sensors/${type}/readings?limit=${limit}`);
+      const res = await fetch(url, {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache' },
+        headers: getPublicApiFetchHeaders(url),
       });
       if (!res.ok) {
         return demoTrendPoints(type, limit);

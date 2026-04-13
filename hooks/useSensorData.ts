@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useApiBackend } from '@/contexts/ApiBackendContext';
+import { getPublicApiFetchHeaders } from '@/lib/public-api-base';
 import { roundTemperatureCelsius } from '@/lib/thermoutils';
 import { latestDemoValues } from '@/lib/demo-sensor-data';
 
@@ -165,7 +166,12 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
       let settled: PromiseSettledResult<Response>[];
       try {
         settled = await Promise.allSettled(
-          urls.map((u) => fetch(u, { cache: 'no-store' })),
+          urls.map((u) =>
+            fetch(u, {
+              cache: 'no-store',
+              headers: getPublicApiFetchHeaders(u),
+            }),
+          ),
         );
       } catch {
         if (cancelled) return;

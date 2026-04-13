@@ -198,6 +198,17 @@ export function buildPublicApiUrl(path: string, base: string): string {
   return b ? `${b}${p}` : p;
 }
 
+export function getPublicApiFetchHeaders(apiBase: string): HeadersInit {
+  const headers: Record<string, string> = {
+    'Cache-Control': 'no-cache',
+  };
+  // ngrok free tier often shows an interstitial for browser traffic; this bypasses it for API calls.
+  if (/ngrok-free\.dev|ngrok\.io|ngrok\.app/i.test(apiBase)) {
+    headers['ngrok-skip-browser-warning'] = 'true';
+  }
+  return headers;
+}
+
 /**
  * True when the page is HTTPS but the resolved local API base is `http://` to loopback — browsers block this (mixed content).
  * Hosted Amplify (and any HTTPS origin) needs `NEXT_PUBLIC_LOCAL_API_URL` set to an **HTTPS** tunnel (ngrok, Cloudflare Tunnel) to your PC.

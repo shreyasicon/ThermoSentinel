@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useApiBackend } from '@/contexts/ApiBackendContext';
 import { generateDemoReadings } from '@/lib/demo-sensor-data';
+import { getPublicApiFetchHeaders } from '@/lib/public-api-base';
 import type { SensorType } from '@/shared/schema/types';
 
 export interface BackendReading {
@@ -23,11 +24,12 @@ export function useBackendSensorReadings(type: SensorType, limit = 50) {
 
   const fetchReadings = useCallback(async () => {
     try {
+      const url = publicApiUrl(`/api/sensors/${type}/readings?limit=${limit}`);
       const res = await fetch(
-        publicApiUrl(`/api/sensors/${type}/readings?limit=${limit}`),
+        url,
         {
           cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' },
+          headers: getPublicApiFetchHeaders(url),
         },
       );
       if (!res.ok) throw new Error(res.statusText);

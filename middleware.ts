@@ -36,9 +36,15 @@ function isDevTunnelOrigin(origin: string): boolean {
 function applyCors(request: NextRequest, response: NextResponse): NextResponse {
   const origin = request.headers.get('origin');
   const allowed = getAllowedOrigins();
+  const isAmplifyOrigin =
+    !!origin &&
+    /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.amplifyapp\.com$/i.test(origin);
+  const isAmplifyAwsOrigin =
+    !!origin &&
+    /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.amplifyaws\.com$/i.test(origin);
   const ok =
     origin &&
-    (allowed.includes(origin) || isDevTunnelOrigin(origin));
+    (allowed.includes(origin) || isDevTunnelOrigin(origin) || isAmplifyOrigin || isAmplifyAwsOrigin);
   if (ok && origin) {
     response.headers.set('Access-Control-Allow-Origin', origin);
     response.headers.set('Access-Control-Allow-Credentials', 'true');
@@ -46,7 +52,7 @@ function applyCors(request: NextRequest, response: NextResponse): NextResponse {
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   response.headers.set(
     'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, Cache-Control',
+    'Content-Type, Authorization, Cache-Control, ngrok-skip-browser-warning, X-Requested-With',
   );
   response.headers.set('Access-Control-Max-Age', '86400');
   return response;
