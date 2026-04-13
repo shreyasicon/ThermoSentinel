@@ -1,0 +1,51 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package
+    Name="AWS SAM Command Line Interface"
+    Language="1033"
+    Version="1.157.1"
+    Manufacturer="AWS Serverless Applications"
+    UpgradeCode="869d7b3b-a7c9-4e19-ac94-190305391ed1"
+    InstallerVersion="200"
+    Compressed="yes"
+    Scope="perMachine"
+  >
+    <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer version of [ProductName] is already installed. Exiting installation." />
+    <Launch Condition="Installed OR NOT NEWER_VERSION_FOUND" Message="A newer version of [ProductName] is already installed. Exiting installation." />
+
+    <Media Id="1" Cabinet="media1.cab" EmbedCab="yes" />
+
+    <Feature
+      Id="AWSSAMCLI"
+      Title="AWS SAM Command Line Interface"
+      Level="1"
+      Display="expand"
+      AllowAdvertise="no"
+      ConfigurableDirectory="AWS_SAM_CLI_PY3"
+      Description="The AWS SAM Command Line Interface is a unified tool to write serverless applications on AWS Lambda."
+    >
+      <ComponentGroupRef Id="AWS_SAM_CLI_PY3_Files" />
+      <Component Id="SetCLIPathEnvironment" Directory="AWS_SAM_CLI_PY3" Guid="D9DB1CEB-C6AA-42BA-88CE-68BCE0CE005E">
+        <CreateFolder/>
+        <Environment Id="SET_ENV" Action="set" Name="PATH" Part="last" Permanent="no" System="yes" Value="[AWS_SAM_CLI_PY3aBIN]" />
+      </Component>
+    </Feature>
+
+    <Icon Id="samicon" SourceFile="resources\\sam.ico" />
+    <Property Id="ARPPRODUCTICON" Value="samicon" />
+
+    <!-- https://wixtoolset.org/docs/tools/wixext/wixui/#replacing-the-default-bitmaps -->
+    <WixVariable Id="WixUIBannerBmp" Value="resources\\logo_aws.jpg" />
+    <WixVariable Id="WixUIDialogBmp" Value="resources\\dialog.jpg" />
+    <WixVariable Id="WixUILicenseRtf" Value="LICENSE.rtf" />
+    <ui:WixUI Id="WixUI_FeatureTree" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="AmazonProgramsFolderRoot" Name="Amazon">
+        <Directory Id="AWS_SAM_CLI_PY3" Name="AWSSAMCLI" />
+      </Directory>
+    </StandardDirectory>
+  </Fragment>
+</Wix>
