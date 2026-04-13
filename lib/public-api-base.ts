@@ -24,6 +24,7 @@ export const API_BACKEND_STORAGE_KEY = 'thermosentinel-api-backend-v2';
  * Writable from the dashboard; overrides the default loopback when valid.
  */
 export const LOCAL_API_URL_STORAGE_KEY = 'thermosentinel-local-api-url-https';
+const DEFAULT_HOSTED_LOCAL_API_URL = 'https://lanita-hyperlipaemic-demetria.ngrok-free.dev';
 
 function normalizeHttpsBase(raw: string): string {
   return raw.replace(/\/$/, '').trim();
@@ -154,6 +155,9 @@ export function getLocalApiBase(
   if (fromUser) return fromUser;
   if (typeof window !== 'undefined') {
     const { hostname } = window.location;
+    if (isHostedAmplifyHostname(hostname)) {
+      return DEFAULT_HOSTED_LOCAL_API_URL;
+    }
     if (isSameOriginLocalApiHost(hostname)) return '';
   }
   if (requestHost) {

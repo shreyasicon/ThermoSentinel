@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useApiBackend } from '@/contexts/ApiBackendContext';
 import { roundTemperatureCelsius } from '@/lib/thermoutils';
-import { latestDemoValues } from '@/lib/demo-sensor-data';
 
 export interface Sensor {
   id: string;
@@ -169,21 +168,12 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
         );
       } catch {
         if (cancelled) return;
-        if (mode === 'lambda') {
-          setBackendTemps(latestDemoValues('temperature', TOTAL_SENSORS));
-          setBackendHumidity(latestDemoValues('humidity', TOTAL_SENSORS));
-          setBackendPressure(latestDemoValues('pressure', TOTAL_SENSORS));
-          setBackendAirflow(latestDemoValues('airflow', TOTAL_SENSORS));
-          setBackendSmoke(latestDemoValues('smoke', TOTAL_SENSORS));
-          setHasData(true);
-        } else {
-          setBackendTemps([]);
-          setBackendHumidity([]);
-          setBackendPressure([]);
-          setBackendAirflow([]);
-          setBackendSmoke([]);
-          setHasData(false);
-        }
+        setBackendTemps([]);
+        setBackendHumidity([]);
+        setBackendPressure([]);
+        setBackendAirflow([]);
+        setBackendSmoke([]);
+        setHasData(false);
         return;
       }
       if (cancelled) return;
@@ -218,24 +208,12 @@ export const useSensorData = (_initialTemp?: number, _acFailure?: boolean) => {
       let airflow = latestValuesFromReadings(airJ.readings, TOTAL_SENSORS);
       let smoke = latestValuesFromReadings(smkJ.readings, TOTAL_SENSORS);
 
-      // Demo values only when using hosted Lambda API and readings are empty (no fake “live” data on local PC).
-      if (mode === 'lambda') {
-        if (temps.length === 0) temps = latestDemoValues('temperature', TOTAL_SENSORS);
-        if (humidity.length === 0) humidity = latestDemoValues('humidity', TOTAL_SENSORS);
-        if (pressure.length === 0) pressure = latestDemoValues('pressure', TOTAL_SENSORS);
-        if (airflow.length === 0) airflow = latestDemoValues('airflow', TOTAL_SENSORS);
-        if (smoke.length === 0) smoke = latestDemoValues('smoke', TOTAL_SENSORS);
-      }
       setBackendTemps(temps);
       setBackendHumidity(humidity);
       setBackendPressure(pressure);
       setBackendAirflow(airflow);
       setBackendSmoke(smoke);
-      // Local: show racks whenever any series has points (same bar as top summary cards).
-      const hasRackData =
-        mode === 'lambda'
-          ? true
-          : [temps, humidity, pressure, airflow, smoke].some((a) => a.length > 0);
+      const hasRackData = [temps, humidity, pressure, airflow, smoke].some((a) => a.length > 0);
       setHasData(hasRackData);
     };
     run();
