@@ -19,6 +19,7 @@ function averageFromReadingsOrDemo(
   readings: unknown[],
   type: SensorType,
   mode: ApiBackendMode,
+  sourceReachable: boolean,
 ): number | null {
   const values = readings
     .map((r) => numericFromApiRow(r))
@@ -26,8 +27,9 @@ function averageFromReadingsOrDemo(
   if (values.length > 0) {
     return values.reduce((a, b) => a + b, 0) / values.length;
   }
-  // Only synthesize demo averages when viewing the hosted Lambda API — not for “This PC”, or HTTPS→HTTP failures look “live”.
-  if (isLocalApiMode(mode)) return null;
+  // Local modes: only synthesize when local API is actually reachable.
+  // If unreachable (PC/ngrok not running), show empty state.
+  if (isLocalApiMode(mode) && !sourceReachable) return null;
   const demo = latestDemoValues(type, 50);
   return demo.reduce((a, b) => a + b, 0) / demo.length;
 }
@@ -55,11 +57,11 @@ export default function BackendAveragesCards() {
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' },
         });
-        if (!res.ok) return [];
+        if (!res.ok) return { readings: [], reachable: false };
         const data = await res.json();
-        return data.readings ?? [];
+        return { readings: data.readings ?? [], reachable: true };
       } catch {
-        return [];
+        return { readings: [], reachable: false };
       }
     };
     const [pressureR, humidityR, airflowR, smokeR] = await Promise.all([
@@ -68,11 +70,12 @@ export default function BackendAveragesCards() {
       fetchReadings('airflow', 50),
       fetchReadings('smoke', 50),
     ]);
+    const anyReachable = [pressureR, humidityR, airflowR, smokeR].some((x) => x.reachable);
     setData({
-      avgPressure: averageFromReadingsOrDemo(pressureR, 'pressure', mode),
-      avgHumidity: averageFromReadingsOrDemo(humidityR, 'humidity', mode),
-      avgAirflow: averageFromReadingsOrDemo(airflowR, 'airflow', mode),
-      avgSmoke: averageFromReadingsOrDemo(smokeR, 'smoke', mode),
+      avgPressure: averageFromReadingsOrDemo(pressureR.readings, 'pressure', mode, anyReachable),
+      avgHumidity: averageFromReadingsOrDemo(humidityR.readings, 'humidity', mode, anyReachable),
+      avgAirflow: averageFromReadingsOrDemo(airflowR.readings, 'airflow', mode, anyReachable),
+      avgSmoke: averageFromReadingsOrDemo(smokeR.readings, 'smoke', mode, anyReachable),
     });
   }, [publicApiUrl, mode]);
 
