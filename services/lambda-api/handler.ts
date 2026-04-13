@@ -20,6 +20,12 @@ const VALID_TYPES: SensorType[] = [
   'smoke',
 ];
 
+const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET,POST,OPTIONS',
+  'access-control-allow-headers': 'content-type,authorization,x-requested-with',
+};
+
 function json(
   statusCode: number,
   body: unknown,
@@ -29,10 +35,19 @@ function json(
     statusCode,
     headers: {
       'content-type': 'application/json',
+      ...CORS_HEADERS,
       ...headers,
     },
     body: JSON.stringify(body),
   };
+}
+
+function normalizePath(rawPath: string): string {
+  if (!rawPath) return '/';
+  const withoutTrailing = rawPath.replace(/\/+$/, '') || '/';
+  if (withoutTrailing === '/api') return '/';
+  if (withoutTrailing.startsWith('/api/')) return withoutTrailing.slice(4);
+  return withoutTrailing;
 }
 
 function isSqsEvent(event: unknown): event is SQSEvent {
@@ -69,9 +84,17 @@ async function handleSqs(event: SQSEvent): Promise<SQSBatchResponse> {
 async function handleHttp(event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> {
   const method = event.requestContext?.http?.method ?? 'GET';
   const rawPath = event.rawPath ?? '';
+  const path = normalizePath(rawPath);
   const qs = event.rawQueryString ?? '';
 
-  if (method === 'GET' && rawPath === '/api/health') {
+  if (method === 'OPTIONS') {
+    return {
+      statusCode: 204,
+      headers: CORS_HEADERS,
+    };
+  }
+
+  if (method === 'GET' && (path === '/health' || rawPath === '/api/health')) {
     return json(200, {
       status: 'ok',
       timestamp: new Date().toISOString(),
@@ -83,7 +106,7 @@ async function handleHttp(event: APIGatewayProxyEventV2): Promise<APIGatewayProx
     });
   }
 
-  if (method === 'POST' && rawPath === '/api/ingest') {
+  if (method === 'POST' && (path === '/ingest' || rawPath === '/api/ingest')) {
     if (!event.body) {
       return json(400, { error: 'Empty body' });
     }
@@ -118,7 +141,9 @@ async function handleHttp(event: APIGatewayProxyEventV2): Promise<APIGatewayProx
     );
   }
 
-  const sensorMatch = rawPath.match(/^\/api\/sensors\/([^/]+)\/readings$/);
+  const sensorMatch =
+    path.match(/^\/sensors\/([^/]+)\/readings$/) ??
+    rawPath.match(/^\/api\/sensors\/([^/]+)\/readings$/);
   if (method === 'GET' && sensorMatch) {
     const type = sensorMatch[1];
     if (!VALID_TYPES.includes(type as SensorType)) {
