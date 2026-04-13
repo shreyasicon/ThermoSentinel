@@ -154,10 +154,11 @@ export function getLocalApiBase(
   /** From `localStorage` (set in UI) — HTTPS ngrok tunnel to the machine running `npm run dev`. */
   persistedHttpsTunnel?: string | null,
 ): string {
-  const env = normalizeHttpsBase(process.env.NEXT_PUBLIC_LOCAL_API_URL || '');
-  if (env) return env;
   const fromUser = parseValidHttpsLocalApiUrl(persistedHttpsTunnel);
   if (fromUser) return fromUser;
+  const env = normalizeHttpsBase(process.env.NEXT_PUBLIC_LOCAL_API_URL || '');
+  const envValidHttps = parseValidHttpsLocalApiUrl(env);
+  if (envValidHttps) return envValidHttps;
   if (typeof window !== 'undefined') {
     const { hostname } = window.location;
     if (isHostedAmplifyHostname(hostname)) {
@@ -169,6 +170,9 @@ export function getLocalApiBase(
     const hostname = requestHost.startsWith('[')
       ? requestHost.split(']')[0].slice(1)
       : requestHost.split(':')[0];
+    if (isHostedAmplifyHostname(hostname)) {
+      return DEFAULT_HOSTED_LOCAL_API_URL;
+    }
     if (isSameOriginLocalApiHost(hostname)) return '';
   }
   return 'http://127.0.0.1:3000';
