@@ -13,6 +13,7 @@ import {
   API_BACKEND_STORAGE_KEY,
   LOCAL_API_URL_STORAGE_KEY,
   buildPublicApiUrl,
+  getDefaultHostedLocalApiUrl,
   isHostedAmplifyHostname,
   readInitialApiMode,
   resolveApiBaseForMode,
@@ -49,7 +50,18 @@ export function ApiBackendProvider({
   useEffect(() => {
     try {
       const v = localStorage.getItem(LOCAL_API_URL_STORAGE_KEY);
-      if (v) setLocalApiTunnelUrlState(v);
+      if (v) {
+        setLocalApiTunnelUrlState(v);
+        return;
+      }
+      // Amplify default: seed the configured ngrok endpoint until user saves another URL.
+      if (typeof window !== 'undefined') {
+        const fallback = getDefaultHostedLocalApiUrl(window.location.hostname);
+        if (fallback) {
+          setLocalApiTunnelUrlState(fallback);
+          localStorage.setItem(LOCAL_API_URL_STORAGE_KEY, fallback);
+        }
+      }
     } catch {
       /* ignore */
     }
